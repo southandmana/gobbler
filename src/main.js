@@ -12,7 +12,7 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 
-const gameState = { value: 'start' }; // start | startTransition | playing | dying | gameover | restartTransition
+const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition
 
 const burst = createBurst();
 const floaters = createFloaters();
@@ -44,6 +44,15 @@ const resetHudTrack = () => {
   hudTrack.changed = {};
   hudTrack.maxed = {};
 };
+let missLog = [];
+let missCount = 0;
+let missPoints = 0;
+const logMiss = (pts, x, y) => {
+  missLog.unshift({ pts, x, y, t: 0 });
+  if (missLog.length > 6) missLog.pop();
+  missCount += 1;
+  missPoints += pts;
+};
 
 const pointsForRadius = (r) => clamp(SCORE.fromRadius(r), SCORE.min, SCORE.max);
 
@@ -58,6 +67,7 @@ const deductScore = (pts, x, y) => {
   setScore(score - pts);
   popText(floaters, `-${pts}`, x, y);
   stress = clamp(stress + DDA.bumpOnMiss, 0, 1);
+  if (debugHUD) logMiss(pts, x, y);
 };
 
 const difficulty01 = () => clamp(score / 120, 0, 1);
@@ -199,6 +209,9 @@ const resetGameVars = () => {
   stress = 0;
   stressEase = 0;
   resetHudTrack();
+  missLog = [];
+  missCount = 0;
+  missPoints = 0;
 };
 
 const beginStartScreen = () => {
@@ -461,6 +474,11 @@ addEventListener('keydown', (e) => {
   if (e.key === 'h' || e.key === 'H') {
     debugHUD = !debugHUD;
   }
+  if (e.key === 'p' || e.key === 'P') {
+    if (gameState.value === 'playing') gameState.value = 'paused';
+    else if (gameState.value === 'paused') gameState.value = 'playing';
+    return;
+  }
   if (e.key === 'r' || e.key === 'R') {
     resetGameVars(); beginStartScreen(); return;
   }
@@ -506,6 +524,12 @@ beginStartScreen();
 const tick = (now) => {
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
+
+  if (gameState.value === 'paused') {
+    draw();
+    requestAnimationFrame(tick);
+    return;
+  }
 
   waveT += dt;
   reliefActive = (waveT % WAVE.period) > (WAVE.period - WAVE.relief);
@@ -767,12 +791,28 @@ const draw = () => {
       ctx.fillText(valueText, boxX + 8 + ctx.measureText(labelText).width, lineY);
     }
     ctx.restore();
+
+    if (missLog.length) {
+      ctx.save();
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+      const startY = boxY + boxH + 16;
+      const title = `missed NPCs (count ${missCount}, pts -${missPoints})`;
+      ctx.fillText(title, boxX, startY);
+      for (let i = 0; i < missLog.length; i++) {
+        const m = missLog[i];
+        ctx.fillText(`-${m.pts} @ (${Math.round(m.x)}, ${Math.round(m.y)})`, boxX, startY + 14 + i * 14);
+      }
+      ctx.restore();
+    }
   }
 
   if (gameState.value === 'start' || gameState.value === 'startTransition') {
     drawScreenText(ctx, w, h, 'GOBBLER', 'TAP TO START', '', getScreenAlpha());
   } else if (gameState.value === 'gameover' || gameState.value === 'restartTransition') {
     drawScreenText(ctx, w, h, 'YOU DIED', 'TAP TO RESTART', String(score), getScreenAlpha());
+  } else if (gameState.value === 'paused') {
+    drawScreenText(ctx, w, h, 'PAUSE', 'PRESS P TO RESUME', '', 1);
   }
 };
 

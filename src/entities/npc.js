@@ -53,7 +53,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
       n.y += n.vy * dt;
       if (n.y < 60 || n.y > groundY() - 40) n.vy *= -1;
 
-      if (n.x < -220) {
+      if (n.x + n.r < 0) {
         deductScore(n.pts, 40, clamp(n.y, 40, groundY() - 40));
         npcs.splice(i, 1);
         continue;
