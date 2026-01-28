@@ -54,12 +54,18 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1) => {
   const gap = lerp(r * 0.08, r * 0.88, o);
   const mouthRect = { x: mouthX - mouthW * 0.5, y: mouthY - gap * 0.5, w: mouthW, h: gap, r: barH * 0.45 };
 
-  // Cutout cavity (hole through the body)
-  pctx.save();
-  pctx.globalCompositeOperation = 'destination-out';
-  roundRect(pctx, mouthRect.x, mouthRect.y, mouthRect.w, mouthRect.h, mouthRect.r);
-  pctx.fill();
-  pctx.restore();
+  // Mouth cavity: cutout when open, solid black when closed
+  if (o > 0.08) {
+    pctx.save();
+    pctx.globalCompositeOperation = 'destination-out';
+    roundRect(pctx, mouthRect.x, mouthRect.y, mouthRect.w, mouthRect.h, mouthRect.r);
+    pctx.fill();
+    pctx.restore();
+  } else {
+    pctx.fillStyle = '#000';
+    roundRect(pctx, mouthRect.x, mouthRect.y, mouthRect.w, mouthRect.h, mouthRect.r);
+    pctx.fill();
+  }
 
   // Teeth (simple blocks)
   pctx.fillStyle = '#fff';

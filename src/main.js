@@ -694,7 +694,7 @@ const draw = () => {
   const h = innerHeight;
   ctx.clearRect(0, 0, w, h);
 
-  ctx.fillStyle = '#000';
+  ctx.fillStyle = '#b00';
   ctx.fillRect(0, 0, w, h);
 
   drawStars(ctx, starsFar, 0.20, scrollX, groundY(), w);
