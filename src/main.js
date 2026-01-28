@@ -1,4 +1,4 @@
-import { PHYS, SQUASH, WORLD, EAT, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL } from './config.js';
+import { PHYS, SQUASH, WORLD, EAT, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
 import { clamp, rand, lerp, easeInOut, dist, lerpAngle } from './utils/math.js';
 import { makeStars, drawStars, drawGround, drawScreenText } from './render/background.js';
 import { createBurst, startBurst, updateBurst, drawBurst, createFloaters, popText, updateFloaters, drawFloaters } from './render/effects.js';
@@ -33,6 +33,10 @@ const groundY = () => innerHeight - WORLD.groundH;
 let score = 0;
 const setScore = (n) => { score = n; scoreEl.textContent = String(n); };
 const showScore = (show) => { scoreEl.style.display = show ? 'block' : 'none'; };
+let waveT = 0;
+let reliefActive = false;
+let stress = 0;
+let stressEase = 0;
 
 const pointsForRadius = (r) => clamp(SCORE.fromRadius(r), SCORE.min, SCORE.max);
 
@@ -46,6 +50,7 @@ const deductScore = (pts, x, y) => {
   if (!pts) return;
   setScore(score - pts);
   popText(floaters, `-${pts}`, x, y);
+  stress = clamp(stress + DDA.bumpOnMiss, 0, 1);
 };
 
 const difficulty01 = () => clamp(score / 120, 0, 1);
@@ -53,12 +58,17 @@ const updateDifficulty = () => {
   const d = difficulty01();
   const smooth = d * d * (3 - 2 * d);
   const s = Math.pow(smooth, 0.65);
-  WORLD.speed = lerp(WORLD.baseSpeed, WORLD.maxSpeed, s);
+  const baseSpeed = lerp(WORLD.baseSpeed, WORLD.maxSpeed, s);
+  const waveScale = reliefActive ? WAVE.speedScale : 1;
+  const ddaScale = lerp(1, DDA.speedScale, stressEase);
+  WORLD.speed = baseSpeed * waveScale * ddaScale;
 };
 const minGapPx = () => {
   const d = difficulty01();
   const gapTime = lerp(GAP.timeEasy, GAP.timeHard, d);
-  return gapTime * WORLD.speed;
+  const base = clamp(gapTime * WORLD.speed, GAP.minPx, GAP.maxPx);
+  const scaled = base * lerp(1, DDA.gapScale, stressEase);
+  return clamp(scaled, GAP.minPx, GAP.maxPx * DDA.gapScale);
 };
 const nextInterval = (kind) => {
   if (kind === 'npc') return rand(SPAWN.npcMin, SPAWN.npcMax);
@@ -277,7 +287,8 @@ const nextNPCBucket = () => {
 const maybeStartTrail = () => {
   if (trail) return false;
   const d = difficulty01();
-  const pTrail = (d < 0.35) ? TRAIL.probEasy : (d < 0.75) ? TRAIL.probMid : TRAIL.probHard;
+  const pTrailBase = (d < 0.35) ? TRAIL.probEasy : (d < 0.75) ? TRAIL.probMid : TRAIL.probHard;
+  const pTrail = clamp(pTrailBase + (reliefActive ? WAVE.trailBoost : 0), 0, 0.95);
   const pRed = (d < 0.35) ? TRAIL.probRedEasy : (d < 0.75) ? TRAIL.probRedMid : TRAIL.probRedHard;
 
   const roll = Math.random();
@@ -476,6 +487,11 @@ beginStartScreen();
 const tick = (now) => {
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
+
+  waveT += dt;
+  reliefActive = (waveT % WAVE.period) > (WAVE.period - WAVE.relief);
+  stress = Math.max(0, stress - dt * DDA.decay);
+  stressEase = clamp((stress - DDA.threshold) / (1 - DDA.threshold), 0, 1);
 
   updateDifficulty();
   scrollX += WORLD.speed * dt;
