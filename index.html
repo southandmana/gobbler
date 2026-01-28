@@ -1,0 +1,1492 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smiley Time</title>
+  <style>
+    html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden}
+    canvas{display:block;width:100vw;height:100vh}
+    .score{
+      position:fixed;top:12px;left:12px;color:#fff;
+      font:700 22px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      user-select:none;opacity:.9;display:none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="score" id="score">0</div>
+
+<script>
+/*
+Smiley Time (cute + stressful pass)
+- Adds simple eyes + expressive states (neutral / fear / hungry) to improve readability.
+- Keeps shapes minimal (black/white + existing red hazards).
+- Adds tiny floating +points pop when you eat an NPC (optional "juice" without clutter).
+- Keeps code organized: drawCharacter() composes body + mouth seam/wedge + eyes.
+*/
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const player2Canvas = document.createElement('canvas');
+  const player2Ctx = player2Canvas.getContext('2d');
+
+  // ======== Small helpers ========
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const rand=(a,b)=>Math.random()*(b-a)+a;
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const easeInOut=t=>t*t*(3-2*t);
+
+  function resize(){
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    canvas.width = Math.floor(innerWidth * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  function dist(ax,ay,bx,by){
+    const dx=ax-bx, dy=ay-by;
+    return Math.hypot(dx,dy);
+  }
+  function lerpAngle(a,b,t){
+    let d = b - a;
+    while(d > Math.PI) d -= Math.PI*2;
+    while(d < -Math.PI) d += Math.PI*2;
+    return a + d*t;
+  }
+
+  // ======== Config ========
+  const PHYS = { gravity: 1650, flapVy: -560, maxFall: 900 };
+  const SQUASH = { y: 0.50, tapMs: 170 };
+
+  // Difficulty: ONLY speed ramps
+  const WORLD = { baseSpeed: 320, maxSpeed: 520, speed: 320, groundH: 80 };
+
+  // Eat rule: need a margin so it feels fair/readable
+  const EAT = { margin: 0.10, capturePad: 10, swallowDur: 0.16, intentDist: 180 };
+
+  // Score / growth scale with NPC size
+  const SCORE = { min: 1, max: 25, fromRadius: r => Math.round(r / 6) };
+  const GROW  = { baseStep: 3, fromRadius: r => clamp(Math.round(r / 7), 1, 10) };
+  // Spawn timing (stable)
+  const SPAWN = { npcMin: 0.85, npcMax: 1.45, redMin: 1.40, redMax: 2.35, blueMin: 3.10, blueMax: 5.20 };
+
+  // Fairness spacing
+  const GAP = { timeEasy: 0.78, timeHard: 0.56 };
+
+  // Mouth: event-driven single chomp
+  const MOUTH = { pulseDur: 0.12, minCooldown: 0.07 };
+
+  // NPC size balancing: keep points available
+  const BALANCE = {
+    edibleProb: 0.68,
+    dangerProb: 0.26,
+    neutralProb: 0.06,
+    edibleGuaranteeAfter: 3
+  };
+
+  // Trail bundles (combo moments)
+  const TRAIL = {
+    // How often bundles happen (approx; scheduler also controls rhythm)
+    probEasy: 0.14,
+    probMid: 0.18,
+    probHard: 0.10,
+
+    probRedEasy: 0.04,
+    probRedMid: 0.06,
+    probRedHard: 0.08,
+
+    lenMin: 4,
+    lenMax: 7,
+
+    // Spawn spacing in seconds (consistent feel across speed)
+    dtMin: 0.18,
+    dtMax: 0.26,
+
+    // Size band relative to player for trail members (mostly edible)
+    scaleMin: 0.55,
+    scaleMax: 0.90
+  };
+
+  // Eyes (minimal)
+  const EYES = {
+    // eye placement inside radius
+    yOff: -0.18,
+    xSep: 0.28,
+    r: 0.10,         // eye dot radius (relative)
+    pupilShift: 0.14 // relative shift
+  };
+
+  // ======== State ========
+  let state = 'start'; // start | startTransition | playing | dying | gameover | restartTransition
+
+  // ======== World helpers ========
+  function groundY(){ return innerHeight - WORLD.groundH; }
+
+  let score = 0;
+  function setScore(n){ score = n; scoreEl.textContent = String(n); }
+  function showScore(show){ scoreEl.style.display = show ? 'block' : 'none'; }
+
+  // Points are based on NPC radius at spawn (keeps it fair/consistent).
+  function pointsForRadius(r){
+    return clamp(SCORE.fromRadius(r), SCORE.min, SCORE.max);
+  }
+  function addScore(pts, x, y){
+    if(!pts) return;
+    setScore(score + pts);
+    popText(`+${pts}`, x, y);
+  }
+  function deductScore(pts, x, y){
+    if(!pts) return;
+    setScore(score - pts);
+    popText(`-${pts}`, x, y);
+  }
+
+  function difficulty01(){ return clamp(score / 120, 0, 1); } // score is bigger now
+  function updateDifficulty(){
+    const d = difficulty01();
+    const smooth = d*d*(3-2*d);          // smoothstep
+    const s = Math.pow(smooth, 0.65);    // steeper early ramp (gets fast quicker)
+    WORLD.speed = lerp(WORLD.baseSpeed, WORLD.maxSpeed, s);
+  }
+  function minGapPx(){
+    const d = difficulty01();
+    const gapTime = lerp(GAP.timeEasy, GAP.timeHard, d);
+    return gapTime * WORLD.speed;
+  }
+  function nextInterval(kind){
+    if(kind === 'npc') return rand(SPAWN.npcMin, SPAWN.npcMax);
+    if(kind === 'red') return rand(SPAWN.redMin, SPAWN.redMax);
+    return rand(SPAWN.blueMin, SPAWN.blueMax); // blue
+  }
+  function canEat(rA, rB){ return rA >= rB * (1 + EAT.margin); }
+
+  // ======== Player ========
+  const player = {
+    x: 160, y: 0, vy: 0,
+    r: 18, baseR: 18, maxR: Infinity,
+    alive: true,
+    emotion: 'neutral',
+    mouth: { open: 0, dir: 0, pulseT: 1, pulseDur: MOUTH.pulseDur, cooldown: 0 },
+    _beingEaten: null,
+    squashY: 1,
+    squashTarget: 1
+  };
+
+  // ======== NPCs & Reds ========
+  const npcs = [];
+  const reds = [];
+  const blues = [];
+  let npcT = 0, redT = 0, blueT = 0;
+  let trail = null; // {kind:'trail'|'trail_red', remaining:int, t:float, dt:float, baseX:number, y:number}
+  let lastSpawnWorldX = -1e9;
+  let spawnsSinceEdible = 0;
+
+  // ======== Spawn placement (no overlaps) ========
+  const SPAWN_GAP = 6;
+
+  function circlesOverlap(x1,y1,r1,x2,y2,r2){
+    const dx = x1 - x2, dy = y1 - y2;
+    const rr = r1 + r2 + SPAWN_GAP;
+    return (dx*dx + dy*dy) < rr*rr;
+  }
+
+  function overlapsExisting(x,y,r){
+    for(const o of npcs){
+      if(Math.abs(x - o.x) > r + o.r + SPAWN_GAP) continue;
+      if(circlesOverlap(x,y,r, o.x,o.y,o.r)) return true;
+    }
+    for(const o of reds){
+      if(Math.abs(x - o.x) > r + o.r + SPAWN_GAP) continue;
+      if(circlesOverlap(x,y,r, o.x,o.y,o.r)) return true;
+    }
+    for(const o of blues){
+      if(Math.abs(x - o.x) > r + o.r + SPAWN_GAP) continue;
+      if(circlesOverlap(x,y,r, o.x,o.y,o.r)) return true;
+    }
+    return false;
+  }
+
+  function pickSpawnY(x,r){
+    const yMin = 60;
+    const yMax = groundY() - 40;
+    let y = rand(yMin, yMax);
+    for(let i=0;i<30;i++){
+      const cand = rand(yMin, yMax);
+      if(!overlapsExisting(x, cand, r)) return cand;
+      y = cand;
+    }
+    return y; // fallback: keep game running
+  }
+
+  function resolveSpawnX(x,y,r){
+    let xx = x;
+    for(let i=0;i<60;i++){
+      if(!overlapsExisting(xx, y, r)) return xx;
+      xx += 4; // nudge right until clear
+    }
+    return xx;
+  }
+
+
+  // ======== Encounter scheduler (reduces RNG → more "earned" runs) ========
+  // We still randomize positions/sizes, but we control the *rhythm* of encounters.
+  const encounterQueue = [];     // values: 'edible' | 'neutral' | 'danger'
+  let forceEdibleNext = false;
+
+  // ======== Parallax ========
+  const starsFar = makeStars(70);
+  const starsNear = makeStars(50);
+  let scrollX = 0;
+  function makeStars(n){
+    const s=[];
+    for(let i=0;i<n;i++) s.push({ x:Math.random(), y:Math.random(), r:rand(0.7,1.8) });
+    return s;
+  }
+
+  // ======== Burst ========
+  const burst = { active:false, t:0, dur:0.55, x:0, y:0, particles:[] };
+  function startBurst(x,y,dur=0.55){
+    burst.active = true;
+    burst.t = 0;
+    burst.dur = dur;
+    burst.x = x;
+    burst.y = y;
+    burst.particles.length = 0;
+
+    const n = 14;
+    for(let i=0;i<n;i++){
+      burst.particles.push({
+        a: (i/n) * Math.PI*2 + rand(-0.12, 0.12),
+        spd: rand(220, 520),
+        r0: rand(2, 4)
+      });
+    }
+  }
+  function updateBurst(dt){
+    if(!burst.active) return;
+    burst.t = clamp(burst.t + dt / burst.dur, 0, 1);
+    if(burst.t >= 1) burst.active = false;
+  }
+
+  // ======== Screen transition ========
+  const screenAnim = { active:false, t:0, dur:0.45 };
+
+  // ======== Floating +points (tiny juice) ========
+  const floaters = []; // {x,y,txt,t}
+  function popText(txt,x,y){
+    floaters.push({ x, y, txt, t:0 });
+  }
+  function updateFloaters(dt){
+    for(let i=floaters.length-1;i>=0;i--){
+      const f = floaters[i];
+      f.t += dt;
+      f.y -= 28 * dt;
+      if(f.t > 0.75) floaters.splice(i,1);
+    }
+  }
+  function drawFloaters(){
+    ctx.save();
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    for(const f of floaters){
+      const a = clamp(1 - f.t / 0.75, 0, 1);
+      ctx.globalAlpha = a;
+      ctx.fillText(f.txt, f.x, f.y);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // ======== Mouth helpers ========
+  function triggerChomp(m){
+    if(m.cooldown > 0) return;
+    m.pulseT = 0;
+    m.pulseDur = MOUTH.pulseDur;
+    m.cooldown = MOUTH.minCooldown;
+  }
+  function updateMouth(dt, m){
+    if(m.cooldown > 0) m.cooldown -= dt;
+    if(m.pulseT < 1){
+      m.pulseT = clamp(m.pulseT + dt / m.pulseDur, 0, 1);
+      m.open = Math.sin(Math.PI * m.pulseT); // 0 -> 1 -> 0
+    } else {
+      m.open = 0;
+    }
+  }
+
+  // ======== Input ========
+  function flap(){
+    if(state !== 'playing' || !player.alive || player._beingEaten) return;
+    player.vy = PHYS.flapVy;
+  }
+
+  // ======== Input (tap to jump, hold to duck) ========
+  // Press: squash immediately (duck). Release: jump.
+  let inputHeld = false;
+  let inputHeldAt = 0;
+
+  function inputPress(){
+    if(state !== 'playing' || !player.alive || player._beingEaten) return;
+    if(inputHeld) return;
+
+    inputHeld = true;
+    inputHeldAt = performance.now();
+
+    // Don't duck immediately — wait to see if it's a tap.
+    // (Duck will activate in the game loop once held past SQUASH.tapMs.)
+  }
+
+  function inputRelease(){
+    if(!inputHeld) return;
+
+    const heldMs = performance.now() - inputHeldAt;
+    inputHeld = false;
+
+    // Always stand back up on release
+    player.squashTarget = 1;
+
+    // Tap = jump. Hold = duck only (no jump on release).
+    if(state === 'playing' && heldMs <= SQUASH.tapMs){
+      flap();
+    }
+  }
+
+  addEventListener('keydown', (e)=>{
+    if(e.key === 'r' || e.key === 'R'){
+      resetGameVars(); beginStartScreen(); return;
+    }
+    if(e.code === 'Space'){
+      e.preventDefault();
+      if(state === 'start') startStartTransition();
+      else if(state === 'gameover') startRestartTransition();
+      else inputPress();
+    }
+  }, { passive:false });
+
+  addEventListener('keyup', (e)=>{
+    if(e.code === 'Space'){
+      e.preventDefault();
+      // In play: release jumps. On menus this does nothing.
+      if(state === 'playing') inputRelease();
+    }
+  }, { passive:false });
+
+
+  function toCanvasXY(ev){
+    const rect = canvas.getBoundingClientRect();
+    return { x: (ev.clientX - rect.left), y: (ev.clientY - rect.top) };
+  }
+
+  addEventListener('pointerdown', (ev)=>{
+    const p = toCanvasXY(ev);
+
+    if(state === 'start'){ startStartTransition(); return; }
+    if(state === 'gameover'){ startRestartTransition(); return; }
+    if(state === 'startTransition' || state === 'restartTransition' || state === 'dying') return;
+
+    inputPress();
+  });
+
+
+  addEventListener('pointerup', (ev)=>{
+    if(state === 'playing') inputRelease();
+  });
+addEventListener('pointercancel', (ev)=>{
+    if(state === 'playing') inputRelease();
+  });
+addEventListener('blur', ()=>{ inputRelease(); });
+
+  // ======== Game flow ========
+  function resetGameVars(){
+    npcs.length = 0;
+    reds.length = 0;
+    blues.length = 0;
+    npcT = 0;
+    redT = 0;
+    blueT = 0;
+    setScore(0);
+    spawnsSinceEdible = 0;
+    encounterQueue.length = 0;
+    forceEdibleNext = false;
+    trail = null;
+    floaters.length = 0;
+
+    player.alive = true;
+    player.r = player.baseR;
+    player.vy = 0;
+    player.y = groundY() - player.r;
+    player.x = 160;
+    player.emotion = 'neutral';
+    player._beingEaten = null;
+
+    // Reset duck / input state so a new run never starts already squashed
+    inputHeld = false;
+    inputHeldAt = 0;
+    player.squashY = 1;
+    player.squashTarget = 1;
+
+    player.mouth.open = 0;
+    player.mouth.dir = 0;
+    player.mouth.pulseT = 1;
+    player.mouth.pulseDur = MOUTH.pulseDur;
+    player.mouth.cooldown = 0;
+
+    burst.active = false;
+    burst.t = 0;
+    burst.particles.length = 0;
+
+    WORLD.speed = WORLD.baseSpeed;
+    lastSpawnWorldX = -1e9;
+  }
+
+  function beginStartScreen(){
+    state = 'start';
+    showScore(false);
+    screenAnim.active = false;
+    burst.active = false;
+  }
+
+  function beginGame(){
+    resetGameVars();
+    showScore(true);
+    state = 'playing';
+    updateDifficulty();
+    startBurst(player.x, player.y, 0.45);
+  }
+
+  function beginGameOver(){
+    state = 'gameover';
+    showScore(false);
+    screenAnim.active = true;
+    screenAnim.t = 0;
+    screenAnim.dur = 0.45;
+    startBurst(innerWidth/2, innerHeight/2, 0.55);
+  }
+
+  function startStartTransition(){
+    screenAnim.active = true;
+    screenAnim.t = 0;
+    screenAnim.dur = 0.45;
+    startBurst(innerWidth/2, innerHeight/2, 0.55);
+    state = 'startTransition';
+  }
+
+  function startRestartTransition(){
+    screenAnim.active = true;
+    screenAnim.t = 0;
+    screenAnim.dur = 0.45;
+    startBurst(innerWidth/2, innerHeight/2, 0.55);
+    state = 'restartTransition';
+  }
+
+  // ======== Spawning ========
+  function canSpawnNow(){
+    const spawnWorldX = scrollX + innerWidth + 60;
+    return (spawnWorldX - lastSpawnWorldX) >= minGapPx();
+  }
+  function markSpawn(){ lastSpawnWorldX = scrollX + innerWidth + 60; }
+
+  function refillEncounterQueue(){
+    const d = difficulty01();
+
+    // Easy → mostly edible with occasional danger.
+    const easy = [
+      ['edible','edible','danger'],
+      ['edible','edible','edible','danger'],
+      ['edible','neutral','edible','danger'],
+      ['edible','edible','neutral'],
+    ];
+
+    // Medium → more tension, still fair.
+    const medium = [
+      ['edible','danger','edible'],
+      ['edible','neutral','danger','edible'],
+      ['edible','edible','danger','neutral'],
+      ['edible','danger','edible','neutral'],
+    ];
+
+    // Hard → tighter rhythm, but we still guarantee edible after danger via forceEdibleNext.
+    const hard = [
+      ['edible','danger','edible','danger'],
+      ['edible','neutral','danger','edible','danger'],
+      ['edible','danger','neutral','edible','danger'],
+    ];
+
+    const pool = (d < 0.35) ? easy : (d < 0.75) ? medium : hard;
+    const pat = pool[Math.floor(Math.random() * pool.length)];
+    for(const k of pat) encounterQueue.push(k);
+  }
+
+  function dangerOnScreen(){
+    let c = 0;
+    for(const n of npcs){
+      if(n.state !== 'fly') continue;
+      if(canEat(n.r, player.r)) c++;
+    }
+    return c;
+  }
+
+  function nextNPCBucket(){
+    // Hard guarantee: after a danger spawn, the very next NPC is edible.
+    if(forceEdibleNext){
+      forceEdibleNext = false;
+    trail = null;
+      return 'edible';
+    }
+
+    if(encounterQueue.length === 0) refillEncounterQueue();
+    let b = encounterQueue.shift() || 'edible';
+
+    // Early-game safety budget: avoid stacking multiple dangers on screen.
+    if(b === 'danger' && difficulty01() < 0.35 && dangerOnScreen() >= 1){
+      b = 'edible';
+    }
+
+    if(b === 'danger') forceEdibleNext = true;
+    return b;
+  }
+
+  function maybeStartTrail(){
+    if(trail) return false;
+    const d = difficulty01();
+    const pTrail = (d < 0.35) ? TRAIL.probEasy : (d < 0.75) ? TRAIL.probMid : TRAIL.probHard;
+    const pRed   = (d < 0.35) ? TRAIL.probRedEasy : (d < 0.75) ? TRAIL.probRedMid : TRAIL.probRedHard;
+
+    const roll = Math.random();
+    if(roll < pTrail){
+      const kind = (Math.random() < (pRed / Math.max(0.001, pTrail))) ? 'trail_red' : 'trail';
+      const len = Math.floor(rand(TRAIL.lenMin, TRAIL.lenMax + 1));
+      const dt = rand(TRAIL.dtMin, TRAIL.dtMax);
+
+      // Start position: slightly earlier so the first bead is visible before the chain arrives.
+      const baseX = innerWidth + 180;
+
+      // Trail spawns in a single "lane" for satisfying juggling.
+      const y = pickSpawnY(baseX, 56);
+
+      trail = { kind, remaining: len, t: 0, dt, baseX, y, spawned: 0, redIndex: (kind==='trail_red' ? Math.floor(len/2) : -1) };
+      return true;
+    }
+    return false;
+  }
+
+  function spawnTrailMember(){
+    if(!trail || trail.remaining <= 0) return;
+
+    // Mostly edible by construction: choose radius in a safe band relative to player.
+    const pr = player.r;
+    const safeMax = pr / (1 + EAT.margin) * 0.96;
+    const r = clamp(rand(TRAIL.scaleMin * pr, TRAIL.scaleMax * pr), 10, Math.min(68, safeMax));
+
+    // Stagger x positions a little so they appear like a bead chain.
+    let beadX = trail.baseX + trail.spawned * (WORLD.speed * trail.dt * 0.92);
+    beadX = resolveSpawnX(beadX, trail.y, r);
+
+    // Optionally insert a red hazard in the middle.
+    if(trail.kind === 'trail_red' && trail.spawned === trail.redIndex){
+      // Red in the chain: keep it visible and fair.
+      const rr = rand(12, 20);
+      const hx = resolveSpawnX(beadX, trail.y, rr);
+      reds.push(makeRed(hx, trail.y, rr));
+    } else {
+      npcs.push(makeNPC(beadX, trail.y, r, true));
+    }
+
+    trail.spawned++;
+    trail.remaining--;
+    markSpawn();
+  }
+
+  function updateTrail(dt){
+    if(!trail) return;
+    trail.t -= dt;
+    while(trail && trail.t <= 0){
+      spawnTrailMember();
+      if(trail.remaining <= 0){
+        trail = null;
+        break;
+      }
+      trail.t += trail.dt;
+    }
+  }
+
+  function makeNPC(x,y,r,worth=true){
+    const pts = worth ? pointsForRadius(r) : 0;
+    return {
+      x,y,r,
+      pts, worth,
+      vy: rand(-12, 12),
+      emotion: 'neutral',
+      mouth: { open:0, dir:0, pulseT:1, pulseDur:MOUTH.pulseDur, cooldown:0 },
+      state: 'fly', // fly | beingEaten | eatingPlayer
+      t: 0, x0: 0, y0: 0, r0: 0
+    };
+  }
+
+  function chooseNPCRadius(bucket){
+    const pr = player.r;
+
+    // Secondary streak protection (in case the queue got weird):
+    // after a few non-edible buckets, force edible.
+    const forceEdible = (spawnsSinceEdible >= BALANCE.edibleGuaranteeAfter);
+    if(forceEdible) bucket = 'edible';
+
+    const eatableMax = pr / (1 + EAT.margin) * 0.96;
+    const eatableMin = Math.max(10, pr * 0.40);
+
+    const dangerMin  = pr * (1 + EAT.margin) * 1.06;
+    const dangerMax  = Math.min(68, pr * 1.85);
+
+    const neutralMin = pr / (1 + EAT.margin) * 0.98;
+    const neutralMax = pr * (1 + EAT.margin) * 1.02;
+
+    const pickIn=(a,b,fa,fb)=> (b <= a + 0.5) ? rand(fa,fb) : rand(a,b);
+
+    let r;
+    if(bucket === 'edible'){
+      r = pickIn(eatableMin, Math.min(eatableMax, 62), 10, Math.min(24, pr));
+      spawnsSinceEdible = 0;
+    } else if(bucket === 'danger'){
+      r = pickIn(Math.max(dangerMin, 14), dangerMax, Math.max(22, pr*1.15), Math.max(30, pr*1.55));
+      spawnsSinceEdible++;
+    } else { // neutral
+      r = pickIn(Math.max(12, neutralMin), Math.min(62, neutralMax), Math.max(14, pr*0.8), Math.max(18, pr*1.05));
+      spawnsSinceEdible++;
+    }
+    return clamp(r, 10, 68);
+  }
+
+  function spawnNPC(){
+    const bucket = nextNPCBucket();
+    const r = chooseNPCRadius(bucket);
+
+    // Telegraph danger a bit earlier (more reaction time), without changing the look.
+    const lead = (bucket === 'danger') ? 160 : (bucket === 'neutral') ? 80 : 0;
+    const x = innerWidth + 70 + lead;
+    const y = pickSpawnY(x, r);
+
+    const worth = (bucket !== 'danger'); // only penalize missed edible/neutral NPCs
+    npcs.push(makeNPC(x, y, r, worth));
+    markSpawn();
+  }
+
+  function makeRed(x,y,r){ return { x,y,r, state:'fly', t:0, x0:0,y0:0,r0:0 }; }
+  function spawnRed(){
+    const r = rand(12, 22);
+    const x = innerWidth + 120;
+    const y = pickSpawnY(x, r);
+
+    // Slight extra lead so reds feel "seen" before they kill you.
+    reds.push(makeRed(x, y, r));
+    markSpawn();
+  }
+
+  // ======== Updates ========
+  function driftNPCs(move){
+    for(let i=npcs.length-1;i>=0;i--){
+      npcs[i].x -= move;
+      if(npcs[i].x < -220) npcs.splice(i,1);
+    }
+  }
+  function driftReds(move){
+    for(let i=reds.length-1;i>=0;i--){
+      reds[i].x -= move;
+      if(reds[i].x < -140) reds.splice(i,1);
+    }
+  }
+  function driftBlues(move){
+    for(let i=blues.length-1;i>=0;i--){
+      blues[i].x -= move;
+      if(blues[i].x < -140) blues.splice(i,1);
+    }
+  }
+
+  function updateNPCs(move, dt){
+    // Track nearest danger for player emotion
+    let nearestDangerDist = Infinity;
+
+    for(let i=npcs.length-1;i>=0;i--){
+      const n = npcs[i];
+
+      // face the player (adds "they're watching you" stress)
+      const angToPlayer = Math.atan2(player.y - n.y, player.x - n.x);
+      n.mouth.dir = lerpAngle(n.mouth.dir, angToPlayer, 1 - Math.pow(0.001, dt));
+      updateMouth(dt, n.mouth);
+
+      if(n.state === 'fly'){
+        n.x -= move;
+        n.y += n.vy * dt;
+        if(n.y < 60 || n.y > groundY() - 40) n.vy *= -1;
+
+        if(n.x < -220){
+          // Missed NPC: deduct the points you *would have earned* by eating it.
+          // (We only assign pts for edible/neutral spawns; dangers have pts=0.)
+          deductScore(n.pts, 40, clamp(n.y, 40, groundY() - 40));
+          npcs.splice(i,1);
+          continue;
+        }
+        if(!player.alive || player._beingEaten) continue;
+
+        const d = dist(player.x, player.y, n.x, n.y);
+        const prC = player.r * (0.5 * (1 + player.squashY));
+        const capture = prC + n.r + EAT.capturePad;
+
+        const playerCanEat = canEat(player.r, n.r);
+        const npcCanEat    = canEat(n.r, player.r);
+
+        // Expression cues (readability)
+        // - If you're clearly edible and close: fear
+        // - If you're clearly dangerous and close: hungry
+        // - Else: neutral
+        if(playerCanEat && d < capture + EAT.intentDist){
+          n.emotion = 'fear';
+        } else if(npcCanEat && d < capture + EAT.intentDist){
+          n.emotion = 'hungry';
+          nearestDangerDist = Math.min(nearestDangerDist, d);
+        } else {
+          n.emotion = 'neutral';
+          if(npcCanEat) nearestDangerDist = Math.min(nearestDangerDist, d);
+        }
+
+        // Capture moment
+        if(d <= capture && n.x >= player.x - 10){
+          if(playerCanEat){
+            n.state = 'beingEaten';
+            n.t = 0;
+            n.x0 = n.x; n.y0 = n.y; n.r0 = n.r;
+            n.emotion = 'fear';
+            triggerChomp(player.mouth);
+          } else if(npcCanEat){
+            n.state = 'eatingPlayer';
+            n.t = 0;
+            n.emotion = 'hungry';
+            triggerChomp(n.mouth);
+            player._beingEaten = { t:0, x0:player.x, y0:player.y, r0:player.r, tx:n.x, ty:n.y };
+          }
+        }
+
+      } else if(n.state === 'beingEaten'){
+        n.t = clamp(n.t + dt / EAT.swallowDur, 0, 1);
+        const tt = easeInOut(n.t);
+        n.x = lerp(n.x0, player.x, tt);
+        n.y = lerp(n.y0, player.y, tt);
+        n.r = lerp(n.r0, 0, tt);
+
+        if(n.t >= 1){
+          npcs.splice(i,1);
+          addScore(n.pts, player.x, player.y - player.r - 10);
+          const grow = GROW.baseStep + GROW.fromRadius(n.r0);
+          player.r = clamp(player.r + grow, player.baseR, player.maxR);
+          if(player.y > groundY() - (player.r * player.squashY)) player.y = groundY() - (player.r * player.squashY);
+        }
+
+      } else if(n.state === 'eatingPlayer'){
+        n.x -= move;
+        if(n.x < -220){ npcs.splice(i,1); continue; }
+      }
+    }
+
+    // Player expression: if danger is near, look worried (cute stress)
+    if(!player._beingEaten && player.alive){
+      player.emotion = (nearestDangerDist < 220) ? 'fear' : 'neutral';
+    }
+  }
+
+  function makeBlue(x,y,r){ return { x,y,r, state:'fly', t:0, x0:0,y0:0,r0:0 }; }
+  function spawnBlue(){
+    const r = rand(14, 26);
+    const x = innerWidth + 120;
+    const y = pickSpawnY(x, r);
+
+    // Blue = reset power-up (shrink back to smallest size)
+    blues.push(makeBlue(x, y, r));
+    markSpawn();
+  }
+
+  function updateBlues(move, dt){
+    for(let i=blues.length-1;i>=0;i--){
+      const o = blues[i];
+
+      if(o.state === 'fly'){
+        o.x -= move;
+        if(o.x < -140){ blues.splice(i,1); continue; }
+        if(!player.alive || player._beingEaten) continue;
+
+        const prC = player.r * (0.5 * (1 + player.squashY));
+        const capture = prC + o.r + EAT.capturePad;
+        const d = dist(player.x, player.y, o.x, o.y);
+        if(d <= capture && o.x >= player.x - 10){
+          o.state = 'eaten';
+          o.t = 0;
+          o.x0 = o.x; o.y0 = o.y; o.r0 = o.r;
+          triggerChomp(player.mouth);
+        }
+      } else {
+        o.t = clamp(o.t + dt / EAT.swallowDur, 0, 1);
+        const tt = easeInOut(o.t);
+
+        o.x = lerp(o.x0, player.x, tt);
+        o.y = lerp(o.y0, player.y, tt);
+        o.r = lerp(o.r0, 0, tt);
+
+        if(o.t >= 1){
+          blues.splice(i,1);
+          const before = player.r;
+          player.r = player.baseR; // reset to smallest size
+          if(player.y > groundY() - (player.r * player.squashY)) player.y = groundY() - (player.r * player.squashY);
+          if(before !== player.r){
+            popText('SMALL!', player.x, player.y - player.r - 12);
+          }
+        }
+      }
+    }
+  }
+
+  // ======== Drawing ========
+  function drawStars(stars, mul){
+    const w = innerWidth;
+    const off = (scrollX * mul) % w;
+    ctx.fillStyle = '#fff';
+    for(const s of stars){
+      const x = (s.x * w - off + w) % w;
+      const y = s.y * (groundY() - 30);
+      ctx.beginPath();
+      ctx.arc(x, y, s.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawPlayer2(x, y, r, dirRad, open01, squashY=1){
+    const o = clamp(open01, 0, 1);
+
+    const pad = r * 0.35;
+    const size = Math.ceil(r * 2 + pad * 2);
+    if(player2Canvas.width !== size){
+      player2Canvas.width = size;
+      player2Canvas.height = size;
+    }
+
+    const pctx = player2Ctx;
+    pctx.setTransform(1,0,0,1,0,0);
+    pctx.clearRect(0,0,size,size);
+    pctx.translate(size * 0.5, size * 0.5);
+
+    // Body
+    pctx.fillStyle = '#57dbe2';
+    pctx.beginPath();
+    pctx.arc(0, 0, r, 0, Math.PI * 2);
+    pctx.fill();
+
+    // Left cheek bump (capsule)
+    pctx.fillStyle = '#52cfd6';
+    const bumpW = r * 0.36;
+    const bumpH = r * 1.20;
+    roundRect(pctx, -r * 1.02, -bumpH * 0.45, bumpW, bumpH, bumpW * 0.5);
+    pctx.fill();
+
+    // Mouth geometry (simple bars)
+    const mouthW = r * 1.30;
+    const mouthY = r * 0.10;
+    const mouthX = r * 0.40;
+    const barH = Math.max(r * 0.18, 6);
+    const gap = lerp(r * 0.08, r * 0.88, o);
+
+    // Mouth mask (cutout through the body)
+    const mouthRect = { x: mouthX - mouthW * 0.50, y: mouthY - gap * 0.50, w: mouthW, h: gap, r: barH * 0.45 };
+    pctx.save();
+    pctx.globalCompositeOperation = 'destination-out';
+    roundRect(pctx, mouthRect.x, mouthRect.y, mouthRect.w, mouthRect.h, mouthRect.r);
+    pctx.fill();
+    pctx.restore();
+
+    // Lips (pink bars)
+    pctx.fillStyle = '#ff8f92';
+    roundRect(pctx, mouthX - mouthW * 0.50, mouthY - gap * 0.50 - barH, mouthW, barH, barH * 0.45);
+    pctx.fill();
+    roundRect(pctx, mouthX - mouthW * 0.50, mouthY + gap * 0.50, mouthW, barH, barH * 0.45);
+    pctx.fill();
+
+    // Teeth (simple blocks)
+    pctx.fillStyle = '#fff';
+    const topTeethY = mouthY - gap * 0.50 - barH + barH * 0.12;
+    const botTeethY = mouthY + gap * 0.50 + barH * 0.05;
+    const teethH = Math.max(r * 0.14, 5);
+    const topCount = (o < 0.08) ? 0 : (o < 0.35 ? 4 : 4);
+    const botCount = (o < 0.12) ? 0 : 4;
+    if(topCount > 0) drawTeethRow(pctx, mouthX - mouthW * 0.34, topTeethY, mouthW * 0.68, teethH, topCount);
+    if(botCount > 0) drawTeethRow(pctx, mouthX - mouthW * 0.34, botTeethY, mouthW * 0.68, teethH, botCount);
+
+    // Eye (single), clamped above the mouth at small sizes
+    pctx.fillStyle = '#2f3c14';
+    const eyeR = Math.max(r * 0.10, 2.5);
+    const mouthTop = mouthY - gap * 0.50 - barH;
+    const eyeY = Math.min(-r * 0.20, mouthTop - eyeR * 1.2);
+    pctx.beginPath();
+    pctx.arc(r * 0.42, eyeY, eyeR, 0, Math.PI * 2);
+    pctx.fill();
+
+    // Idle line (closed mouth seam)
+    if(o < 0.08){
+      pctx.strokeStyle = '#000';
+      pctx.lineWidth = clamp(r * 0.05, 2, 6);
+      pctx.lineCap = 'round';
+      pctx.beginPath();
+      pctx.moveTo(mouthX - mouthW * 0.42, mouthY);
+      pctx.lineTo(mouthX + mouthW * 0.42, mouthY);
+      pctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(x, y);
+    if(squashY !== 1) ctx.scale(1, squashY);
+    ctx.rotate(dirRad);
+    ctx.drawImage(player2Canvas, -size * 0.5, -size * 0.5, size, size);
+    ctx.restore();
+  }
+
+  function drawTeethRow(c, x, y, w, h, count){
+    const gap = w * 0.04;
+    const toothW = (w - gap * (count - 1)) / count;
+    const r = Math.min(toothW, h) * 0.35;
+    for(let i=0;i<count;i++){
+      const tx = x + i * (toothW + gap);
+      roundRect(c, tx, y, toothW, h, r);
+      c.fill();
+    }
+  }
+
+  function roundRect(c, x, y, w, h, r){
+    const rr = Math.min(r, w * 0.5, h * 0.5);
+    c.beginPath();
+    c.moveTo(x + rr, y);
+    c.lineTo(x + w - rr, y);
+    c.arcTo(x + w, y, x + w, y + rr, rr);
+    c.lineTo(x + w, y + h - rr);
+    c.arcTo(x + w, y + h, x + w - rr, y + h, rr);
+    c.lineTo(x + rr, y + h);
+    c.arcTo(x, y + h, x, y + h - rr, rr);
+    c.lineTo(x, y + rr);
+    c.arcTo(x, y, x + rr, y, rr);
+    c.closePath();
+  }
+
+  // Compose character: mouth body + eyes.
+  function drawCharacter(x,y,r,dirRad,open01,emotion,squashY=1){
+    // Body squashes (duck), but facial marks (eyes + seam line) stay crisp.
+    drawPacBody(x,y,r,dirRad,open01,squashY);
+    drawPacSeam(x,y,r,dirRad,open01);   // only draws when mouth is nearly closed (unscaled)
+    drawEyes(x,y,r,dirRad,emotion);     // unscaled
+  }
+
+  // Pac mouth body (white). When closed: seam line so mouth still reads.
+  function drawPacBody(x,y,r,dirRad,open01,squashY=1){
+    const o = clamp(open01,0,1);
+
+    ctx.save();
+    if(squashY !== 1){
+      ctx.translate(x,y);
+      ctx.scale(1, squashY);
+      ctx.translate(-x,-y);
+    }
+
+    if(o < 0.02){
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    const minHalf = 0.06 * Math.PI;
+    const maxHalf = 0.45 * Math.PI;
+    const half = lerp(minHalf, maxHalf, o);
+
+    const a1 = dirRad + half;
+    const a2 = dirRad - half;
+
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.arc(x, y, r, a1, a2, false);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Mouth seam line when closed (kept unscaled so it stays crisp while ducking)
+  function drawPacSeam(x,y,r,dirRad,open01){
+    const o = clamp(open01,0,1);
+    if(o >= 0.02) return;
+
+    const minLW = Math.min(1.0, 0.18 * r);
+    const lw = clamp(r * 0.22, minLW, 10);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = lw;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(dirRad) * (r * 0.98), y + Math.sin(dirRad) * (r * 0.98));
+    ctx.stroke();
+  }
+
+  // Minimal eyes: two dots + tiny pupil shift.
+  // emotion:
+  // - neutral: normal dots
+  // - fear: slightly bigger eyes, pupils pulled "back" from movement direction
+  // - hungry: pupils pushed "forward" along movement direction (looks intent)
+  function drawEyes(x,y,r,dirRad,emotion){
+    // Eyes-only, positioned to match the Pac-style "facing" look:
+    // - Mouth seam points to dirRad (idle is 3 o'clock).
+    // - Two eyes sit just ABOVE that seam, near the FRONT edge, with tidy spacing.
+    const fx = Math.cos(dirRad), fy = Math.sin(dirRad);     // forward
+    // "Up" relative to forward has two valid perpendiculars.
+    // If we always pick the same one, the face can look "upside down" when looking left.
+    // So we choose the perpendicular that points *up the screen* (more negative y).
+    const ux1 =  fy, uy1 = -fx;
+    const ux2 = -fy, uy2 =  fx;
+    const use1 = (uy1 < uy2);
+    const ux = use1 ? ux1 : ux2;
+    const uy = use1 ? uy1 : uy2;
+
+    // Place eyes near the front-right edge (for dir=0), slightly above the seam.
+    // For very small enemies we ease these offsets down a bit so the face stays readable.
+    const t = clamp((r - 10) / 18, 0, 1);        // 0=very small, 1=normal+
+    const front = lerp(0.36, 0.42, t);
+    const up = lerp(0.24, 0.30, t);
+
+    const baseX = x + fx * (front * r) + ux * (up * r);
+    const baseY = y + fy * (front * r) + uy * (up * r);
+
+    // Two eyes separated along the forward axis (so for dir=0 they're side-by-side horizontally).
+    const sep = lerp(0.12, 0.15, t) * r;
+    const e1x = baseX - fx * sep;
+    const e1y = baseY - fy * sep;
+    const e2x = baseX + fx * sep;
+    const e2y = baseY + fy * sep;
+
+    // Dot size (still minimal)
+    const minEye = Math.min(0.7, 0.09 * r);
+    let eyeR = clamp(0.11 * r, minEye, 14);
+    if(emotion === 'fear') eyeR *= 1.10;
+    if(emotion === 'hungry') eyeR *= 0.92;
+
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(e1x, e1y, eyeR, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(e2x, e2y, eyeR, 0, Math.PI*2); ctx.fill();
+  }
+
+  function drawBurst(){
+    const t = burst.t;
+    const x = burst.x, y = burst.y;
+
+    const ringR = lerp(0, 90, t);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#fff';
+    ctx.globalAlpha = 1 - t;
+    ctx.beginPath();
+    ctx.arc(x, y, ringR, 0, Math.PI*2);
+    ctx.stroke();
+
+    for(const p of burst.particles){
+      const d = p.spd * t;
+      const px = x + Math.cos(p.a) * d;
+      const py = y + Math.sin(p.a) * d;
+      const pr = lerp(p.r0, 0, t);
+      ctx.beginPath();
+      ctx.arc(px, py, pr, 0, Math.PI*2);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+
+  // Draw a "dynamite/bomb" hazard using the same hitbox (x,y,r) as the old red circle.
+  // Visual only: gameplay + collision remain identical.
+  function drawDynamiteBomb(x, y, r){
+    const rr = Math.max(0, r);
+    if(rr <= 0) return;
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    // Body (still roughly circular so it matches the original feel)
+    ctx.fillStyle = '#ff2b2b';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rr * 1.02, rr * 0.92, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Band
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    // Band (rounded rectangle)
+    const bx = -rr * 0.95, by = -rr * 0.18, bw = rr * 1.9, bh = rr * 0.36, br = rr * 0.16;
+    ctx.beginPath();
+    ctx.moveTo(bx + br, by);
+    ctx.lineTo(bx + bw - br, by);
+    ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
+    ctx.lineTo(bx + bw, by + bh - br);
+    ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
+    ctx.lineTo(bx + br, by + bh);
+    ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
+    ctx.lineTo(bx, by + br);
+    ctx.quadraticCurveTo(bx, by, bx + br, by);
+    ctx.closePath();
+    ctx.fill();
+
+    // Highlight
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(-rr * 0.28, -rr * 0.30, rr * 0.40, rr * 0.25, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Fuse
+    const fx = rr * 0.35, fy = -rr * 0.58;
+    ctx.strokeStyle = '#caa34a';
+    ctx.lineWidth = Math.max(2, rr * 0.12);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(fx, fy);
+    ctx.quadraticCurveTo(rr * 0.95, -rr * 1.10, rr * 0.68, -rr * 1.38);
+    ctx.stroke();
+
+    // Spark (simple glowing dot + rays)
+    const sx = rr * 0.68, sy = -rr * 1.38;
+    const sparkR = Math.max(2, rr * 0.12);
+
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#ffd24a';
+    ctx.beginPath(); ctx.arc(sx, sy, sparkR * 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#ffd24a';
+    ctx.beginPath(); ctx.arc(sx, sy, sparkR, 0, Math.PI * 2); ctx.fill();
+
+    ctx.strokeStyle = '#ffd24a';
+    ctx.lineWidth = Math.max(1.5, rr * 0.06);
+    for(let i=0;i<6;i++){
+      const a = i * (Math.PI * 2 / 6);
+      const r1 = sparkR * 1.4;
+      const r2 = sparkR * 2.8;
+      ctx.beginPath();
+      ctx.moveTo(sx + Math.cos(a) * r1, sy + Math.sin(a) * r1);
+      ctx.lineTo(sx + Math.cos(a) * r2, sy + Math.sin(a) * r2);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+
+  // Blue pickup appearance: star (hitbox still uses the same radius elsewhere)
+  function drawStar(x, y, r){
+    const rr = Math.max(0, r);
+    if(rr <= 0) return;
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    const spikes = 5;
+    const outer = rr * 1.10;
+    const inner = rr * 0.50;
+
+    // Star shape
+    ctx.beginPath();
+    let rot = -Math.PI / 2;
+    const step = Math.PI / spikes;
+
+    ctx.moveTo(Math.cos(rot) * outer, Math.sin(rot) * outer);
+    for(let i = 0; i < spikes; i++){
+      ctx.lineTo(Math.cos(rot + step) * inner, Math.sin(rot + step) * inner);
+      rot += step;
+      ctx.lineTo(Math.cos(rot + step) * outer, Math.sin(rot + step) * outer);
+      rot += step;
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Subtle outline so it reads well against the black background
+    ctx.lineWidth = Math.max(1, rr * 0.12);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawScreenText(title, subtitle, extra, alpha){
+    ctx.save();
+    ctx.globalAlpha = clamp(alpha, 0, 1);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const cx = innerWidth/2;
+    const cy = innerHeight/2;
+
+    ctx.font = '800 54px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText(title, cx, cy - 34);
+
+    if(extra){
+      ctx.font = '800 38px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+      ctx.fillText(extra, cx, cy + 18);
+    }
+
+    ctx.font = '600 20px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText(subtitle, cx, cy + (extra ? 62 : 34));
+    ctx.restore();
+  }
+
+  function getScreenAlpha(){
+    if(state === 'startTransition' || state === 'restartTransition'){
+      const t = screenAnim.t;
+      return 1 - easeInOut(t);
+    }
+    return 1;
+  }
+
+  // ======== Main loop ========
+  let last = performance.now();
+  beginStartScreen();
+
+  function tick(now){
+    const dt = Math.min(0.033, (now-last)/1000);
+    last = now;
+
+    updateDifficulty();
+    scrollX += WORLD.speed * dt;
+
+    updateBurst(dt);
+    updateFloaters(dt);
+
+    if(screenAnim.active){
+      screenAnim.t = clamp(screenAnim.t + dt / screenAnim.dur, 0, 1);
+      if(screenAnim.t >= 1){
+        if(state === 'startTransition'){ screenAnim.active = false; beginGame(); }
+        else if(state === 'restartTransition'){ screenAnim.active = false; beginGame(); }
+        else screenAnim.active = false;
+      }
+    }
+
+    if(state === 'playing'){
+      // Hold-to-duck (after tap window). Tap stays as a jump with no duck.
+      if(inputHeld){
+        const heldMs = performance.now() - inputHeldAt;
+        player.squashTarget = (heldMs > SQUASH.tapMs) ? SQUASH.y : 1;
+      }
+      // spawn
+      // Trail bundle runner (spawns multiple close-together enemies)
+      updateTrail(dt);
+
+      npcT -= dt;
+      if(npcT <= 0){
+        if(canSpawnNow()){
+          // Sometimes start a trail instead of a single spawn (combo moments).
+          if(!maybeStartTrail()){
+            spawnNPC();
+          }
+          npcT = nextInterval('npc');
+        } else {
+          npcT = 0.05;
+        }
+      }
+      redT -= dt;
+      if(redT <= 0){
+        if(canSpawnNow()){ spawnRed(); redT = nextInterval('red'); }
+        else redT = 0.08;
+      }
+      blueT -= dt;
+      if(blueT <= 0){
+        if(canSpawnNow()){ spawnBlue(); blueT = nextInterval('blue'); }
+        else blueT = 0.10;
+      }
+
+      // player physics (disabled while being eaten)
+      if(!player._beingEaten){
+        // squash smoothing (duck)
+        player.squashY = lerp(player.squashY, player.squashTarget, 1 - Math.pow(0.001, dt));
+        player.vy += PHYS.gravity * dt;
+        player.vy = clamp(player.vy, -2000, PHYS.maxFall);
+        player.y += player.vy * dt;
+
+        const gy = groundY();
+        const prY = player.r * player.squashY;
+        const floor = gy - prY;
+        if(player.y > floor){
+          player.y = floor;
+          player.vy = player.vy * -0.18;
+          if(Math.abs(player.vy) < 60) player.vy = 0;
+        }
+
+        // Top out-of-bounds: only die if the *entire* body leaves the screen.
+        // (Allow partial off-screen jumps.)
+        if(player.y + (player.r * player.squashY) < 0){
+          player.alive = false;
+          startBurst(player.x, 0, 0.55);
+          state = 'dying';
+          showScore(false);
+        }
+      }
+
+      // movement
+      const move = WORLD.speed * dt;
+      updateNPCs(move, dt);
+      updateReds(move, dt);
+      updateBlues(move, dt);
+      updateMouth(dt, player.mouth);
+
+      // being eaten anim
+      if(player._beingEaten){
+        player._beingEaten.t = clamp(player._beingEaten.t + dt / EAT.swallowDur, 0, 1);
+        const tt = easeInOut(player._beingEaten.t);
+        player.x = lerp(player._beingEaten.x0, player._beingEaten.tx, tt);
+        player.y = lerp(player._beingEaten.y0, player._beingEaten.ty, tt);
+        player.r = lerp(player._beingEaten.r0, 0, tt);
+        if(player._beingEaten.t >= 1){
+          player.alive = false;
+          startBurst(player._beingEaten.tx, player._beingEaten.ty, 0.55);
+          state = 'dying';
+          showScore(false);
+          player._beingEaten = null;
+        }
+      }
+
+      // player mouth direction: track nearest in-front NPC for cuteness
+      let best = null, bestD = Infinity;
+      for(const n of npcs){
+        if(n.state !== 'fly') continue;
+        if(n.x < player.x - 10) continue;
+        const d = dist(player.x, player.y, n.x, n.y);
+        if(d < bestD){ bestD = d; best = n; }
+      }
+      const targetAngle = best ? Math.atan2(best.y - player.y, best.x - player.x) : 0;
+      player.mouth.dir = lerpAngle(player.mouth.dir, targetAngle, 1 - Math.pow(0.001, dt));
+    } else {
+      // drift while on menus
+      const move = WORLD.speed * dt;
+      driftNPCs(move);
+      driftReds(move);
+      driftBlues(move);
+    }
+
+    if(state === 'dying'){
+      if(!burst.active) beginGameOver();
+    }
+
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  // ======== Drawing pass ========
+  function draw(){
+    const w = innerWidth, h = innerHeight;
+    ctx.clearRect(0,0,w,h);
+
+    // background
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,w,h);
+
+    // parallax stars
+    drawStars(starsFar, 0.20);
+    drawStars(starsNear, 0.45);
+
+    // ground
+    const gy = groundY();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, gy, w, 2);
+
+    const gap = 50;
+    const off = scrollX % gap;
+    for(let x=-gap; x<w+gap; x+=gap){
+      ctx.fillRect(x - off, gy + 10, 10, 3);
+    }
+
+    // reds (hazards)
+    for(const o of reds){
+      drawDynamiteBomb(o.x, o.y, Math.max(0,o.r));
+    }
+
+    // blues (reset power-ups)
+    ctx.fillStyle = '#2b6cff';
+    for(const o of blues){
+      drawStar(o.x, o.y, Math.max(0,o.r));
+    }
+
+    // NPCs
+    for(const n of npcs){
+      drawCharacter(n.x, n.y, n.r, n.mouth.dir, n.mouth.open, n.emotion);
+    }
+
+    // Player
+    if(state === 'playing' && player.r > 0.3){
+      drawPlayer2(player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY);
+    }
+
+    // pop texts
+    drawFloaters();
+
+    // burst
+    if(burst.active) drawBurst();
+
+    // screens
+    if(state === 'start' || state === 'startTransition'){
+      drawScreenText('GOBBLER', 'TAP TO START', '', getScreenAlpha());
+    } else if(state === 'gameover' || state === 'restartTransition'){
+      drawScreenText('YOU DIED', 'TAP TO RESTART', String(score), getScreenAlpha());
+    }
+  }
+
+  // ======== Red update (kept same as before) ========
+  function updateReds(move, dt){
+    for(let i=reds.length-1;i>=0;i--){
+      const o = reds[i];
+
+      if(o.state === 'fly'){
+        o.x -= move;
+        if(o.x < -140){ reds.splice(i,1); continue; }
+        if(!player.alive || player._beingEaten) continue;
+
+        const prC = player.r * (0.5 * (1 + player.squashY));
+        const capture = prC + o.r + EAT.capturePad;
+        const d = dist(player.x, player.y, o.x, o.y);
+        if(d <= capture && o.x >= player.x - 10){
+          o.state = 'eaten';
+          o.t = 0;
+          o.x0 = o.x; o.y0 = o.y; o.r0 = o.r;
+          triggerChomp(player.mouth);
+        }
+      } else {
+        o.t = clamp(o.t + dt / EAT.swallowDur, 0, 1);
+        const tt = easeInOut(o.t);
+
+        o.x = lerp(o.x0, player.x, tt);
+        o.y = lerp(o.y0, player.y, tt);
+        o.r = lerp(o.r0, 0, tt);
+
+        if(o.t >= 1){
+          reds.splice(i,1);
+          player.alive = false;
+          startBurst(player.x, player.y, 0.55);
+          state = 'dying';
+          showScore(false);
+        }
+      }
+    }
+  }
+
+  // ======== Start ========
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
