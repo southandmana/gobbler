@@ -1,0 +1,21 @@
+{
+  "name": "gobbler",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "cap:sync": "npx cap sync",
+    "ios": "npx cap open ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "vite": "^5.4.0"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0"
+  }
+}
