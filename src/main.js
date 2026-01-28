@@ -37,6 +37,13 @@ let waveT = 0;
 let reliefActive = false;
 let stress = 0;
 let stressEase = 0;
+let debugHUD = false;
+const hudTrack = { init: {}, changed: {}, maxed: {} };
+const resetHudTrack = () => {
+  hudTrack.init = {};
+  hudTrack.changed = {};
+  hudTrack.maxed = {};
+};
 
 const pointsForRadius = (r) => clamp(SCORE.fromRadius(r), SCORE.min, SCORE.max);
 
@@ -69,6 +76,11 @@ const minGapPx = () => {
   const base = clamp(gapTime * WORLD.speed, GAP.minPx, GAP.maxPx);
   const scaled = base * lerp(1, DDA.gapScale, stressEase);
   return clamp(scaled, GAP.minPx, GAP.maxPx * DDA.gapScale);
+};
+const trailProb = () => {
+  const d = difficulty01();
+  const base = (d < 0.35) ? TRAIL.probEasy : (d < 0.75) ? TRAIL.probMid : TRAIL.probHard;
+  return clamp(base + (reliefActive ? WAVE.trailBoost : 0), 0, 0.95);
 };
 const nextInterval = (kind) => {
   if (kind === 'npc') return rand(SPAWN.npcMin, SPAWN.npcMax);
@@ -182,6 +194,11 @@ const resetGameVars = () => {
 
   WORLD.speed = WORLD.baseSpeed;
   lastSpawnWorldX = -1e9;
+  waveT = 0;
+  reliefActive = false;
+  stress = 0;
+  stressEase = 0;
+  resetHudTrack();
 };
 
 const beginStartScreen = () => {
@@ -287,8 +304,7 @@ const nextNPCBucket = () => {
 const maybeStartTrail = () => {
   if (trail) return false;
   const d = difficulty01();
-  const pTrailBase = (d < 0.35) ? TRAIL.probEasy : (d < 0.75) ? TRAIL.probMid : TRAIL.probHard;
-  const pTrail = clamp(pTrailBase + (reliefActive ? WAVE.trailBoost : 0), 0, 0.95);
+  const pTrail = trailProb();
   const pRed = (d < 0.35) ? TRAIL.probRedEasy : (d < 0.75) ? TRAIL.probRedMid : TRAIL.probRedHard;
 
   const roll = Math.random();
@@ -442,6 +458,9 @@ const inputRelease = () => {
 };
 
 addEventListener('keydown', (e) => {
+  if (e.key === 'h' || e.key === 'H') {
+    debugHUD = !debugHUD;
+  }
   if (e.key === 'r' || e.key === 'R') {
     resetGameVars(); beginStartScreen(); return;
   }
@@ -679,6 +698,76 @@ const draw = () => {
   drawFloaters(ctx, floaters, clamp);
 
   if (burst.active) drawBurst(ctx, burst, lerp);
+
+  if (debugHUD) {
+    const d = difficulty01();
+    const gapMax = GAP.maxPx * DDA.gapScale;
+    const speedVal = WORLD.speed;
+    const gapVal = minGapPx();
+    const trailVal = trailProb();
+    const stressVal = stress;
+    const stressEaseVal = stressEase;
+    const reliefVal = reliefActive ? 'on' : 'off';
+    const numericLines = [
+      { key: 'd', label: 'd', value: d, max: 1.0, fmt: (v) => v.toFixed(2) },
+      { key: 'speed', label: 'speed', value: speedVal, max: WORLD.maxSpeed, fmt: (v) => v.toFixed(1) },
+      { key: 'gapPx', label: 'gapPx', value: gapVal, max: gapMax, fmt: (v) => v.toFixed(1) },
+      { key: 'trailP', label: 'trailP', value: trailVal, max: 0.95, fmt: (v) => v.toFixed(2) },
+      { key: 'stress', label: 'stress', value: stressVal, max: 1.0, fmt: (v) => v.toFixed(2) },
+      { key: 'stressEase', label: 'stressEase', value: stressEaseVal, max: 1.0, fmt: (v) => v.toFixed(2) },
+    ];
+    const lines = [...numericLines, { label: 'relief', value: reliefVal, key: 'relief' }];
+
+    const boxW = 210;
+    const boxH = 14 * lines.length + 12;
+    const boxX = w - boxW - 12;
+    const boxY = 12;
+    const EPS = 1e-3;
+
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.globalAlpha = 1;
+    ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+    for (let i = 0; i < lines.length; i++) {
+      const lineY = boxY + 18 + i * 14;
+      const line = lines[i];
+      const labelText = `${line.label}: `;
+      ctx.fillStyle = '#fff';
+      ctx.fillText(labelText, boxX + 8, lineY);
+
+      if (line.key === 'relief') {
+        ctx.fillStyle = '#fff';
+        ctx.fillText(line.value, boxX + 8 + ctx.measureText(labelText).width, lineY);
+        continue;
+      }
+
+      const cur = line.value;
+      const max = line.max;
+      if (!(line.key in hudTrack.init)) {
+        hudTrack.init[line.key] = cur;
+        hudTrack.changed[line.key] = false;
+        hudTrack.maxed[line.key] = false;
+      }
+      if (Math.abs(cur - hudTrack.init[line.key]) > EPS) {
+        hudTrack.changed[line.key] = true;
+      }
+      if (cur >= max - EPS) {
+        hudTrack.maxed[line.key] = true;
+      }
+
+      let color = '#fff';
+      if (hudTrack.maxed[line.key]) color = '#ffd24a';
+      else if (hudTrack.changed[line.key]) color = '#6bc7ff';
+
+      const valueText = `${line.fmt(cur)} / ${line.fmt(max)}`;
+      ctx.fillStyle = color;
+      ctx.fillText(valueText, boxX + 8 + ctx.measureText(labelText).width, lineY);
+    }
+    ctx.restore();
+  }
 
   if (gameState.value === 'start' || gameState.value === 'startTransition') {
     drawScreenText(ctx, w, h, 'GOBBLER', 'TAP TO START', '', getScreenAlpha());
