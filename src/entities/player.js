@@ -61,22 +61,22 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1) => {
   pctx.fill();
   pctx.restore();
 
-  // Lips (pink bars)
-  pctx.fillStyle = '#ff8f92';
-  roundRect(pctx, mouthX - mouthW * 0.5, mouthY - gap * 0.5 - barH, mouthW, barH, barH * 0.45);
-  pctx.fill();
-  roundRect(pctx, mouthX - mouthW * 0.5, mouthY + gap * 0.5, mouthW, barH, barH * 0.45);
-  pctx.fill();
-
   // Teeth (simple blocks)
   pctx.fillStyle = '#fff';
-  const topTeethY = mouthY - gap * 0.5 - barH + barH * 0.12;
-  const botTeethY = mouthY + gap * 0.5 + barH * 0.05;
+  const topTeethY = mouthY - gap * 0.5 - barH + barH * 0.90;
+  const botTeethY = mouthY + gap * 0.5 - barH * 0.73;
   const teethH = Math.max(r * 0.14, 5);
   const topCount = o < 0.08 ? 0 : 4;
   const botCount = o < 0.12 ? 0 : 4;
   if (topCount > 0) drawTeethRow(pctx, mouthX - mouthW * 0.34, topTeethY, mouthW * 0.68, teethH, topCount);
   if (botCount > 0) drawTeethRow(pctx, mouthX - mouthW * 0.34, botTeethY, mouthW * 0.68, teethH, botCount);
+
+  // Lips (pink bars) drawn on top so teeth sit behind them
+  pctx.fillStyle = '#ff8f92';
+  roundRect(pctx, mouthX - mouthW * 0.5, mouthY - gap * 0.5 - barH, mouthW, barH, barH * 0.45);
+  pctx.fill();
+  roundRect(pctx, mouthX - mouthW * 0.5, mouthY + gap * 0.5, mouthW, barH, barH * 0.45);
+  pctx.fill();
 
   // Eye (single), clamped above the mouth at small sizes
   pctx.fillStyle = '#2f3c14';
