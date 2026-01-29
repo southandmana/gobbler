@@ -9,6 +9,7 @@ export const WORLD = { baseSpeed: 320, maxSpeed: 520, speed: 320, groundH: 80 };
 
 // Eat rule: need a margin so it feels fair/readable
 export const EAT = { margin: 0.10, capturePad: 10, swallowDur: 0.16, intentDist: 180 };
+export const HAZARD = { deflectSpeed: 1650, deflectMinVxRatio: 0.82 };
 
 // Score / growth scale with NPC size
 export const SCORE = { min: 1, max: 25, fromRadius: (r) => Math.round(r / 6) };

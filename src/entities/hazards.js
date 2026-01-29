@@ -8,7 +8,9 @@ export const driftReds = (reds, move) => {
 };
 
 export const updateReds = (reds, player, dt, move, deps) => {
-  const { EAT, triggerChomp, clamp, easeInOut, lerp, startBurst, groundY } = deps;
+  const { EAT, HAZARD, triggerChomp, clamp, easeInOut, lerp, startBurst, groundY } = deps;
+  const deflectSpeed = HAZARD.deflectSpeed;
+  const deflectMinVxRatio = HAZARD.deflectMinVxRatio;
   for (let i = reds.length - 1; i >= 0; i--) {
     const o = reds[i];
 
@@ -31,8 +33,10 @@ export const updateReds = (reds, player, dt, move, deps) => {
           const dx = o.x - player.x;
           const dy = o.y - player.y;
           const ang = Math.atan2(dy, dx);
-          const speed = 900;
-          o.vx = Math.cos(ang) * speed;
+          const speed = deflectSpeed;
+          const vxRaw = Math.cos(ang) * speed;
+          const vxSign = Math.sign(vxRaw) || (dx >= 0 ? 1 : -1);
+          o.vx = vxSign * Math.max(Math.abs(vxRaw), speed * deflectMinVxRatio);
           o.vy = Math.sin(ang) * speed;
           continue;
         }
@@ -92,8 +96,10 @@ export const updateReds = (reds, player, dt, move, deps) => {
           const dx = o.x - player.x;
           const dy = o.y - player.y;
           const ang = Math.atan2(dy, dx);
-          const speed = 900;
-          o.vx = Math.cos(ang) * speed;
+          const speed = deflectSpeed;
+          const vxRaw = Math.cos(ang) * speed;
+          const vxSign = Math.sign(vxRaw) || (dx >= 0 ? 1 : -1);
+          o.vx = vxSign * Math.max(Math.abs(vxRaw), speed * deflectMinVxRatio);
           o.vy = Math.sin(ang) * speed;
           continue;
         }

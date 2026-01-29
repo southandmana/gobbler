@@ -1,4 +1,4 @@
-import { PHYS, SQUASH, STAND, WORLD, EAT, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
+import { PHYS, SQUASH, STAND, WORLD, EAT, HAZARD, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
 import { clamp, rand, lerp, easeInOut, dist, lerpAngle } from './utils/math.js';
 import { makeStars, drawStars, drawGround, drawScreenText } from './render/background.js';
 import { createBurst, startBurst, updateBurst, drawBurst, createFloaters, popText, updateFloaters, drawFloaters } from './render/effects.js';
@@ -642,6 +642,7 @@ const tick = (now) => {
 
     updateReds(reds, player, dt, move, {
       EAT,
+      HAZARD,
       MOUTH,
       triggerChomp,
       clamp,
@@ -751,15 +752,6 @@ const draw = () => {
 
   if (gameState.value === 'playing' && player.r > 0.3) {
     drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY);
-    if (attackFlashT > 0) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'source-atop';
-      ctx.fillStyle = 'rgba(255,0,0,0.35)';
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, player.r * 1.02, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
   }
 
   drawFloaters(ctx, floaters, clamp);
