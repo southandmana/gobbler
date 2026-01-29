@@ -1,4 +1,4 @@
-export const makeRed = (x, y, r) => ({ x, y, r, state: 'fly', t: 0, x0: 0, y0: 0, r0: 0 });
+export const makeRed = (x, y, r) => ({ x, y, r, state: 'fly', t: 0, x0: 0, y0: 0, r0: 0, vx: 0, vy: 0, bounces: 0 });
 
 export const driftReds = (reds, move) => {
   for (let i = reds.length - 1; i >= 0; i--) {
@@ -8,7 +8,7 @@ export const driftReds = (reds, move) => {
 };
 
 export const updateReds = (reds, player, dt, move, deps) => {
-  const { EAT, triggerChomp, clamp, easeInOut, lerp, startBurst } = deps;
+  const { EAT, triggerChomp, clamp, easeInOut, lerp, startBurst, groundY } = deps;
   for (let i = reds.length - 1; i >= 0; i--) {
     const o = reds[i];
 
@@ -21,12 +21,82 @@ export const updateReds = (reds, player, dt, move, deps) => {
       const capture = prC + o.r + EAT.capturePad;
       const d = deps.dist(player.x, player.y, o.x, o.y);
       if (d <= capture && o.x >= player.x - 10) {
+        const fromBelow = (player.y - o.y) > (o.r * 0.25);
+        const upward = player.vy < -120;
+        const attackActive = (deps.attackActive && deps.attackActive());
+        if (attackActive || (fromBelow && upward)) {
+          o.state = 'deflect';
+          o.t = 0;
+          o.bounces = 0;
+          const dx = o.x - player.x;
+          const dy = o.y - player.y;
+          const ang = Math.atan2(dy, dx);
+          const speed = 900;
+          o.vx = Math.cos(ang) * speed;
+          o.vy = Math.sin(ang) * speed;
+          continue;
+        }
         o.state = 'eaten';
         o.t = 0;
         o.x0 = o.x; o.y0 = o.y; o.r0 = o.r;
         triggerChomp(player.mouth, deps.MOUTH);
       }
+    } else if (o.state === 'deflect') {
+      o.x -= move;
+      o.x += o.vx * dt;
+      o.y += o.vy * dt;
+      o.vy += 900 * dt;
+
+      const minX = o.r;
+      const maxX = innerWidth - o.r;
+      const minY = o.r;
+      const maxY = groundY() - o.r;
+      let hitEdge = false;
+
+      if (o.x < minX || o.x > maxX) {
+        hitEdge = true;
+        if (o.bounces === 0) {
+          o.vx = -o.vx;
+          o.x = clamp(o.x, minX, maxX);
+        }
+      }
+      if (o.y < minY || o.y > maxY) {
+        hitEdge = true;
+        if (o.bounces === 0) {
+          o.vy = -o.vy;
+          o.y = clamp(o.y, minY, maxY);
+        }
+      }
+
+      if (hitEdge) {
+        if (o.bounces === 0) {
+          o.bounces = 1;
+        } else {
+          startBurst(o.x, o.y, 0.45);
+          reds.splice(i, 1);
+          continue;
+        }
+      }
     } else {
+      const attackActive = (deps.attackActive && deps.attackActive());
+      if (attackActive) {
+        const prC = player.r * (0.5 * (1 + player.squashY));
+        const capture = prC + o.r + EAT.capturePad;
+        const d = deps.dist(player.x, player.y, o.x, o.y);
+        if (d <= capture) {
+          o.state = 'deflect';
+          o.t = 0;
+          o.bounces = 0;
+          o.r = o.r0 || o.r;
+          const dx = o.x - player.x;
+          const dy = o.y - player.y;
+          const ang = Math.atan2(dy, dx);
+          const speed = 900;
+          o.vx = Math.cos(ang) * speed;
+          o.vy = Math.sin(ang) * speed;
+          continue;
+        }
+      }
       o.t = clamp(o.t + dt / EAT.swallowDur, 0, 1);
       const tt = easeInOut(o.t);
 

@@ -1,4 +1,4 @@
-import { PHYS, SQUASH, WORLD, EAT, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
+import { PHYS, SQUASH, STAND, WORLD, EAT, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
 import { clamp, rand, lerp, easeInOut, dist, lerpAngle } from './utils/math.js';
 import { makeStars, drawStars, drawGround, drawScreenText } from './render/background.js';
 import { createBurst, startBurst, updateBurst, drawBurst, createFloaters, popText, updateFloaters, drawFloaters } from './render/effects.js';
@@ -450,12 +450,15 @@ const flap = () => {
 
 let inputHeld = false;
 let inputHeldAt = 0;
+let didDuckThisHold = false;
+let attackFlashT = 0;
 
 const inputPress = () => {
   if (gameState.value !== 'playing' || !player.alive || player._beingEaten) return;
   if (inputHeld) return;
   inputHeld = true;
   inputHeldAt = performance.now();
+  didDuckThisHold = false;
 };
 
 const inputRelease = () => {
@@ -465,8 +468,13 @@ const inputRelease = () => {
   inputHeld = false;
   player.squashTarget = 1;
 
-  if (gameState.value === 'playing' && heldMs <= SQUASH.tapMs) {
-    flap();
+  if (gameState.value === 'playing') {
+    if (heldMs <= SQUASH.tapMs && !didDuckThisHold) {
+      flap();
+    } else if (didDuckThisHold) {
+      player.vy = Math.min(player.vy, STAND.vy);
+      attackFlashT = 0.18;
+    }
   }
 };
 
@@ -535,6 +543,7 @@ const tick = (now) => {
   reliefActive = (waveT % WAVE.period) > (WAVE.period - WAVE.relief);
   stress = Math.max(0, stress - dt * DDA.decay);
   stressEase = clamp((stress - DDA.threshold) / (1 - DDA.threshold), 0, 1);
+  if (attackFlashT > 0) attackFlashT = Math.max(0, attackFlashT - dt);
 
   updateDifficulty();
   scrollX += WORLD.speed * dt;
@@ -555,6 +564,7 @@ const tick = (now) => {
     if (inputHeld) {
       const heldMs = performance.now() - inputHeldAt;
       player.squashTarget = (heldMs > SQUASH.tapMs) ? SQUASH.y : 1;
+      if (heldMs > SQUASH.tapMs) didDuckThisHold = true;
     }
 
     updateTrail(dt);
@@ -634,6 +644,8 @@ const tick = (now) => {
       startBurst: startBurstAt,
       state: gameState,
       showScore,
+      groundY,
+      attackActive: () => attackFlashT > 0,
     });
 
     updateBlues(blues, player, dt, move, {
@@ -717,6 +729,15 @@ const draw = () => {
 
   if (gameState.value === 'playing' && player.r > 0.3) {
     drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY);
+    if (attackFlashT > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = 'rgba(255,0,0,0.35)';
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.r * 1.02, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   drawFloaters(ctx, floaters, clamp);

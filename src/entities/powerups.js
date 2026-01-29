@@ -39,6 +39,10 @@ export const updateBlues = (blues, player, dt, move, deps) => {
         const before = player.r;
         player.r = player.baseR;
         if (player.y > deps.groundY() - (player.r * player.squashY)) player.y = deps.groundY() - (player.r * player.squashY);
+        if (player.y + (player.r * player.squashY) < 0) {
+          player.y = player.r * player.squashY;
+          player.vy = Math.max(0, player.vy);
+        }
         if (before !== player.r) {
           popText('SMALL!', player.x, player.y - player.r - 12);
         }
