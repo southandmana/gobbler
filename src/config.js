@@ -2,6 +2,7 @@ import { clamp } from './utils/math.js';
 
 export const PHYS = { gravity: 1650, flapVy: -560, maxFall: 900 };
 export const SQUASH = { y: 0.50, tapMs: 170 };
+export const STAND = { vy: -180 };
 
 // Difficulty: ONLY speed ramps
 export const WORLD = { baseSpeed: 320, maxSpeed: 520, speed: 320, groundH: 80 };

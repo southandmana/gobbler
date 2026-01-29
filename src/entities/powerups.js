@@ -24,6 +24,7 @@ export const updateBlues = (blues, player, dt, move, deps) => {
         o.state = 'eaten';
         o.t = 0;
         o.x0 = o.x; o.y0 = o.y; o.r0 = o.r;
+        if (deps.onBite) deps.onBite(o.x, o.y);
         triggerChomp(player.mouth, deps.MOUTH);
       }
     } else {

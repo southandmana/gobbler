@@ -38,6 +38,8 @@ let reliefActive = false;
 let stress = 0;
 let stressEase = 0;
 let debugHUD = false;
+let biteDir = 0;
+let biteT = 0;
 const hudTrack = { init: {}, changed: {}, maxed: {} };
 const resetHudTrack = () => {
   hudTrack.init = {};
@@ -631,6 +633,11 @@ const tick = (now) => {
       easeInOut,
       lerpAngle,
       dist,
+      onBite: (x, y) => {
+        biteDir = Math.atan2(y - player.y, x - player.x);
+        biteT = 0.12;
+        player.mouth.dir = biteDir;
+      },
     });
 
     updateReds(reds, player, dt, move, {
@@ -646,6 +653,11 @@ const tick = (now) => {
       showScore,
       groundY,
       attackActive: () => attackFlashT > 0,
+      onBite: (x, y) => {
+        biteDir = Math.atan2(y - player.y, x - player.x);
+        biteT = 0.12;
+        player.mouth.dir = biteDir;
+      },
     });
 
     updateBlues(blues, player, dt, move, {
@@ -658,6 +670,11 @@ const tick = (now) => {
       dist,
       popText: (txt, x, y) => popText(floaters, txt, x, y),
       groundY,
+      onBite: (x, y) => {
+        biteDir = Math.atan2(y - player.y, x - player.x);
+        biteT = 0.12;
+        player.mouth.dir = biteDir;
+      },
     });
 
     updateMouth(player.mouth, dt, MOUTH, clamp);
@@ -685,7 +702,12 @@ const tick = (now) => {
       if (d < bestD) { bestD = d; best = n; }
     }
     const targetAngle = best ? Math.atan2(best.y - player.y, best.x - player.x) : 0;
-    player.mouth.dir = lerpAngle(player.mouth.dir, targetAngle, 1 - Math.pow(0.001, dt));
+    if (biteT > 0) {
+      biteT = Math.max(0, biteT - dt);
+      player.mouth.dir = lerpAngle(player.mouth.dir, biteDir, 1 - Math.pow(0.000001, dt));
+    } else {
+      player.mouth.dir = lerpAngle(player.mouth.dir, targetAngle, 1 - Math.pow(0.001, dt));
+    }
   } else {
     const move = WORLD.speed * dt;
     driftNPCs(npcs, move);

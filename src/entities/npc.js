@@ -77,14 +77,15 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
         if (npcCanEat) nearestDangerDist = Math.min(nearestDangerDist, d);
       }
 
-      if (d <= capture && n.x >= player.x - 10) {
-        if (playerCanEat) {
-          n.state = 'beingEaten';
-          n.t = 0;
-          n.x0 = n.x; n.y0 = n.y; n.r0 = n.r;
-          n.emotion = 'fear';
-          triggerChomp(player.mouth, deps.MOUTH);
-        } else if (npcCanEat) {
+        if (d <= capture && n.x >= player.x - 10) {
+          if (playerCanEat) {
+            n.state = 'beingEaten';
+            n.t = 0;
+            n.x0 = n.x; n.y0 = n.y; n.r0 = n.r;
+            n.emotion = 'fear';
+            triggerChomp(player.mouth, deps.MOUTH);
+            if (deps.onBite) deps.onBite(n.x, n.y);
+          } else if (npcCanEat) {
           n.state = 'eatingPlayer';
           n.t = 0;
           n.emotion = 'hungry';
