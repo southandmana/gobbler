@@ -31,7 +31,7 @@ export const drawBurst = (ctx, burst, lerp) => {
 
   const ringR = lerp(0, 90, t);
   ctx.lineWidth = 3;
-  ctx.strokeStyle = '#fff';
+  ctx.strokeStyle = '#f2f4f7';
   ctx.globalAlpha = 1 - t;
   ctx.beginPath();
   ctx.arc(x, y, ringR, 0, Math.PI * 2);
@@ -44,7 +44,7 @@ export const drawBurst = (ctx, burst, lerp) => {
     const pr = lerp(p.r0, 0, t);
     ctx.beginPath();
     ctx.arc(px, py, pr, 0, Math.PI * 2);
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#f2f4f7';
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -67,7 +67,7 @@ export const updateFloaters = (floaters, dt) => {
 
 export const drawFloaters = (ctx, floaters, clamp) => {
   ctx.save();
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#f2f4f7';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = '700 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';

@@ -8,7 +8,7 @@ export const makeStars = (n, rand) => {
 
 export const drawStars = (ctx, stars, mul, scrollX, groundY, width) => {
   const off = (scrollX * mul) % width;
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#d5d9e8';
   for (const s of stars) {
     const x = (s.x * width - off + width) % width;
     const y = s.y * (groundY - 30);
@@ -20,18 +20,18 @@ export const drawStars = (ctx, stars, mul, scrollX, groundY, width) => {
 
 export const drawSky = (ctx, width, height) => {
   const g = ctx.createLinearGradient(0, 0, 0, height);
-  g.addColorStop(0, '#bcd4ff');
-  g.addColorStop(0.55, '#e2dbff');
-  g.addColorStop(1, '#ffe9f3');
+  g.addColorStop(0, '#1c2230');
+  g.addColorStop(0.55, '#2a303b');
+  g.addColorStop(1, '#3a3943');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, width, height);
 };
 
 export const drawHills = (ctx, width, groundY, scrollX) => {
   const layers = [
-    { base: groundY - 175, amp: 18, wavelength: 520, speed: 0.08, alpha: 0.55 },
-    { base: groundY - 135, amp: 22, wavelength: 440, speed: 0.12, alpha: 0.65 },
-    { base: groundY - 100, amp: 26, wavelength: 360, speed: 0.18, alpha: 0.75 },
+    { base: groundY - 210, amp: 16, wavelength: 680, speed: 0.05, alpha: 1.0, color: '#2b3336' },
+    { base: groundY - 165, amp: 20, wavelength: 560, speed: 0.08, alpha: 1.0, color: '#30393c' },
+    { base: groundY - 125, amp: 24, wavelength: 460, speed: 0.12, alpha: 1.0, color: '#364042' },
   ];
 
   const step = 12;
@@ -63,59 +63,19 @@ export const drawHills = (ctx, width, groundY, scrollX) => {
     ctx.lineTo(last.x, last.y);
     ctx.lineTo(width, groundY);
     ctx.closePath();
-    ctx.clip();
-
-    const bands = ['#f7a2b6', '#f9c593', '#f9e5a9', '#bfe8c9', '#b6e6f4', '#c5c7ff'];
-    const hillH = Math.max(40, (groundY - baseY) + layer.amp * 1.3);
-    const bandH = hillH / bands.length;
-
-    const addSmoothCurve = (pts, offset, forward) => {
-      if (forward) {
-        for (let i = 0; i < pts.length - 1; i++) {
-          const p = pts[i];
-          const n = pts[i + 1];
-          const mx = (p.x + n.x) * 0.5;
-          const my = (p.y + n.y) * 0.5 + offset;
-          ctx.quadraticCurveTo(p.x, p.y + offset, mx, my);
-        }
-        const end = pts[pts.length - 1];
-        ctx.lineTo(end.x, end.y + offset);
-      } else {
-        for (let i = pts.length - 1; i > 0; i--) {
-          const p = pts[i];
-          const n = pts[i - 1];
-          const mx = (p.x + n.x) * 0.5;
-          const my = (p.y + n.y) * 0.5 + offset;
-          ctx.quadraticCurveTo(p.x, p.y + offset, mx, my);
-        }
-        const end = pts[0];
-        ctx.lineTo(end.x, end.y + offset);
-      }
-    };
-
     ctx.globalAlpha = layer.alpha;
-    for (let i = 0; i < bands.length; i++) {
-      const offsetTop = i * bandH;
-      const offsetBottom = (i + 1) * bandH;
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y + offsetTop);
-      addSmoothCurve(points, offsetTop, true);
-      ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y + offsetBottom);
-      addSmoothCurve(points, offsetBottom, false);
-      ctx.closePath();
-      ctx.fillStyle = bands[i];
-      ctx.fill();
-    }
+    ctx.fillStyle = layer.color;
+    ctx.fill();
     ctx.restore();
   }
 };
 
 export const drawGround = (ctx, groundY, width, height, scrollX) => {
   const groundH = Math.max(20, height - groundY);
-  const colors = ['#f2545b', '#ff9e3d', '#ffe66b', '#7be36f', '#55dfd2', '#4b7bff', '#7a5bf5'];
+  const colors = ['#2d2827', '#332d2b', '#393230', '#3f3734', '#453c38'];
   const rows = colors.length;
   const rowH = groundH / rows;
-  const brickW = Math.max(46, Math.min(96, width * 0.11));
+  const brickW = Math.max(72, Math.min(140, width * 0.16));
   const hash2 = (x, y) => {
     const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
     return v - Math.floor(v);
@@ -136,14 +96,13 @@ export const drawGround = (ctx, groundY, width, height, scrollX) => {
     }
   }
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-  ctx.fillRect(0, groundY, width, 2);
+  // no horizon line
 };
 
 export const drawScreenText = (ctx, width, height, title, subtitle, extra, alpha) => {
   ctx.save();
   ctx.globalAlpha = clamp(alpha, 0, 1);
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#f2f4f7';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 

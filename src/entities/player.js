@@ -2,6 +2,12 @@ import { clamp, lerp } from '../utils/math.js';
 
 const player2Canvas = document.createElement('canvas');
 const player2Ctx = player2Canvas.getContext('2d');
+const DEFAULT_PALETTE = {
+  body: '#57dbe2',
+  bodyAccent: '#52cfd6',
+  lips: '#ff8f92',
+  eye: '#2f3c14',
+};
 
 export const createPlayer = (baseR) => ({
   x: 160,
@@ -18,11 +24,14 @@ export const createPlayer = (baseR) => ({
   squashTarget: 1,
 });
 
-export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1) => {
+export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette = DEFAULT_PALETTE, flipX = false, rotate = true) => {
+  if (!(r > 0.01)) return;
   const o = clamp(open01, 0, 1);
+  const { body, bodyAccent, lips, eye } = palette;
 
   const pad = r * 0.35;
   const size = Math.ceil(r * 2 + pad * 2);
+  if (size <= 0) return;
   if (player2Canvas.width !== size) {
     player2Canvas.width = size;
     player2Canvas.height = size;
@@ -34,13 +43,13 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1) => {
   pctx.translate(size * 0.5, size * 0.5);
 
   // Body
-  pctx.fillStyle = '#57dbe2';
+  pctx.fillStyle = body;
   pctx.beginPath();
   pctx.arc(0, 0, r, 0, Math.PI * 2);
   pctx.fill();
 
   // Left cheek bump (capsule)
-  pctx.fillStyle = '#52cfd6';
+  pctx.fillStyle = bodyAccent;
   const bumpW = r * 0.36;
   const bumpH = r * 1.20;
   roundRect(pctx, -r * 1.02, -bumpH * 0.45, bumpW, bumpH, bumpW * 0.5);
@@ -68,7 +77,7 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1) => {
   }
 
   // Teeth (simple blocks)
-  pctx.fillStyle = '#fff';
+  pctx.fillStyle = '#f2f4f7';
   const topTeethY = mouthY - gap * 0.5 - barH + barH * 0.90;
   const botTeethY = mouthY + gap * 0.5 - barH * 0.73;
   const teethH = Math.max(r * 0.14, 5);
@@ -78,14 +87,14 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1) => {
   if (botCount > 0) drawTeethRow(pctx, mouthX - mouthW * 0.34, botTeethY, mouthW * 0.68, teethH, botCount);
 
   // Lips (pink bars) drawn on top so teeth sit behind them
-  pctx.fillStyle = '#ff8f92';
+  pctx.fillStyle = lips;
   roundRect(pctx, mouthX - mouthW * 0.5, mouthY - gap * 0.5 - barH, mouthW, barH, barH * 0.45);
   pctx.fill();
   roundRect(pctx, mouthX - mouthW * 0.5, mouthY + gap * 0.5, mouthW, barH, barH * 0.45);
   pctx.fill();
 
   // Eye (single), clamped above the mouth at small sizes
-  pctx.fillStyle = '#2f3c14';
+  pctx.fillStyle = eye;
   const eyeR = Math.max(r * 0.10, 2.5);
   const mouthTop = mouthY - gap * 0.5 - barH;
   const eyeY = Math.min(-r * 0.20, mouthTop - eyeR * 1.2);
@@ -107,7 +116,8 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1) => {
   ctx.save();
   ctx.translate(x, y);
   if (squashY !== 1) ctx.scale(1, squashY);
-  ctx.rotate(dirRad);
+  if (flipX) ctx.scale(-1, 1);
+  if (rotate) ctx.rotate(dirRad);
   ctx.drawImage(player2Canvas, -size * 0.5, -size * 0.5, size, size);
   ctx.restore();
 };

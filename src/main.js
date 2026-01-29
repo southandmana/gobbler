@@ -730,7 +730,7 @@ const draw = () => {
 
   drawSky(ctx, w, h);
 
-  drawStars(ctx, starsFar, 0.20, scrollX, groundY(), w);
+  drawStars(ctx, starsFar, 0.05, scrollX, groundY(), w);
 
   drawHills(ctx, w, groundY(), scrollX);
 
@@ -740,7 +740,7 @@ const draw = () => {
     drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
   }
 
-  ctx.fillStyle = '#2b6cff';
+  ctx.fillStyle = '#ffbf4a';
   for (const o of blues) {
     drawStar(ctx, o.x, o.y, Math.max(0, o.r));
   }
@@ -793,11 +793,11 @@ const draw = () => {
       const lineY = boxY + 18 + i * 14;
       const line = lines[i];
       const labelText = `${line.label}: `;
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = '#f2f4f7';
       ctx.fillText(labelText, boxX + 8, lineY);
 
       if (line.key === 'relief') {
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = '#f2f4f7';
         ctx.fillText(line.value, boxX + 8 + ctx.measureText(labelText).width, lineY);
         continue;
       }
@@ -816,7 +816,7 @@ const draw = () => {
         hudTrack.maxed[line.key] = true;
       }
 
-      let color = '#fff';
+      let color = '#f2f4f7';
       if (hudTrack.maxed[line.key]) color = '#ffd24a';
       else if (hudTrack.changed[line.key]) color = '#6bc7ff';
 
@@ -828,7 +828,7 @@ const draw = () => {
 
     if (missLog.length) {
       ctx.save();
-      ctx.fillStyle = '#fff';
+        ctx.fillStyle = '#f2f4f7';
       ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
       const startY = boxY + boxH + 16;
       const title = `missed NPCs (count ${missCount}, pts -${missPoints})`;

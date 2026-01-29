@@ -1,3 +1,17 @@
+import { drawPlayer2 } from './player.js';
+
+const NPC_PALETTE = {
+  body: '#4fcfd8',
+  bodyAccent: '#49c4cd',
+  lips: '#ff8f92',
+  eye: '#3f2b00',
+};
+
+const resolveFacing = (dirRad) => {
+  if (Math.cos(dirRad) >= 0) return { angle: dirRad, flipX: false };
+  return { angle: Math.PI - dirRad, flipX: true };
+};
+
 export const makeNPC = (x, y, r, pts, worth, MOUTH) => ({
   x,
   y,
@@ -118,89 +132,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
   }
 };
 
-export const drawCharacter = (ctx, x, y, r, dirRad, open01, emotion, squashY = 1, clamp, lerp) => {
-  drawPacBody(ctx, x, y, r, dirRad, open01, squashY, clamp, lerp);
-  drawPacSeam(ctx, x, y, r, dirRad, open01, clamp);
-  drawEyes(ctx, x, y, r, dirRad, emotion, clamp, lerp);
-};
-
-const drawPacBody = (ctx, x, y, r, dirRad, open01, squashY, clamp, lerp) => {
-  const o = clamp(open01, 0, 1);
-
-  ctx.save();
-  if (squashY !== 1) {
-    ctx.translate(x, y);
-    ctx.scale(1, squashY);
-    ctx.translate(-x, -y);
-  }
-
-  if (o < 0.02) {
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    return;
-  }
-
-  const minHalf = 0.06 * Math.PI;
-  const maxHalf = 0.45 * Math.PI;
-  const half = lerp(minHalf, maxHalf, o);
-
-  const a1 = dirRad + half;
-  const a2 = dirRad - half;
-
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.arc(x, y, r, a1, a2, false);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-};
-
-const drawPacSeam = (ctx, x, y, r, dirRad, open01, clamp) => {
-  const o = clamp(open01, 0, 1);
-  if (o >= 0.02) return;
-
-  const minLW = Math.min(1.0, 0.18 * r);
-  const lw = clamp(r * 0.22, minLW, 10);
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = lw;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + Math.cos(dirRad) * (r * 0.98), y + Math.sin(dirRad) * (r * 0.98));
-  ctx.stroke();
-};
-
-const drawEyes = (ctx, x, y, r, dirRad, emotion, clamp, lerp) => {
-  const fx = Math.cos(dirRad), fy = Math.sin(dirRad);
-  const ux1 = fy, uy1 = -fx;
-  const ux2 = -fy, uy2 = fx;
-  const use1 = (uy1 < uy2);
-  const ux = use1 ? ux1 : ux2;
-  const uy = use1 ? uy1 : uy2;
-
-  const t = clamp((r - 10) / 18, 0, 1);
-  const front = lerp(0.36, 0.42, t);
-  const up = lerp(0.24, 0.30, t);
-
-  const baseX = x + fx * (front * r) + ux * (up * r);
-  const baseY = y + fy * (front * r) + uy * (up * r);
-
-  const sep = lerp(0.12, 0.15, t) * r;
-  const e1x = baseX - fx * sep;
-  const e1y = baseY - fy * sep;
-  const e2x = baseX + fx * sep;
-  const e2y = baseY + fy * sep;
-
-  const minEye = Math.min(0.7, 0.09 * r);
-  let eyeR = clamp(0.11 * r, minEye, 14);
-  if (emotion === 'fear') eyeR *= 1.10;
-  if (emotion === 'hungry') eyeR *= 0.92;
-
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(e1x, e1y, eyeR, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(e2x, e2y, eyeR, 0, Math.PI * 2); ctx.fill();
+export const drawCharacter = (ctx, x, y, r, dirRad, open01, emotion, squashY = 1) => {
+  const { angle, flipX } = resolveFacing(dirRad);
+  drawPlayer2(ctx, x, y, r, angle, open01, squashY, NPC_PALETTE, flipX, true);
 };
