@@ -3,7 +3,7 @@ export const createShatter = () => ({ active: false, pieces: [] });
 export const createLineBurst = () => ({
   active: false,
   t: 0,
-  dur: 0.20,
+  dur: 0.16,
   x: 0,
   y: 0,
   scale: 1,
@@ -28,7 +28,7 @@ export const startBurst = (burst, x, y, rand, dur = 0.55) => {
   }
 };
 
-export const startLineBurst = (burst, x, y, rand, scale = 1, dur = 0.20) => {
+export const startLineBurst = (burst, x, y, rand, scale = 1, dur = 0.16) => {
   burst.active = true;
   burst.t = 0;
   burst.dur = dur;
@@ -61,6 +61,7 @@ export const startHeadShatter = (shatter, x, y, r, rand, palette, groundY, scale
   const countMax = (opts && opts.countMax) || 16;
   const sizeMin = (opts && opts.sizeMin) || 0.06;
   const sizeMax = (opts && opts.sizeMax) || 0.12;
+  const maxPieceR = (opts && opts.maxPieceR) || Infinity;
   const fadeDur = (opts && opts.fadeDur) || 0.6;
   const velScale = (opts && opts.velScale) || 1;
 
@@ -76,7 +77,7 @@ export const startHeadShatter = (shatter, x, y, r, rand, palette, groundY, scale
       y,
       vx: Math.cos(a) * spd,
       vy: Math.sin(a) * spd - rand(40, 160),
-      r: rand(sizeMin, sizeMax) * r * scale,
+      r: Math.min(maxPieceR, rand(sizeMin, sizeMax) * r * scale),
       color: colors[i % colors.length],
       outline: palette.outline || null,
       groundY,
@@ -218,8 +219,9 @@ export const drawLineBurst = (ctx, burst, lerp) => {
 
 export const createFloaters = () => [];
 
-export const popText = (floaters, txt, x, y) => {
-  floaters.push({ x, y, txt, t: 0 });
+export const popText = (floaters, txt, x, y, color = null) => {
+  const c = color || (typeof txt === 'string' && txt[0] === '-' ? '#ff2b2b' : '#f2f4f7');
+  floaters.push({ x, y, txt, t: 0, color: c });
 };
 
 export const updateFloaters = (floaters, dt) => {
@@ -233,13 +235,22 @@ export const updateFloaters = (floaters, dt) => {
 
 export const drawFloaters = (ctx, floaters, clamp) => {
   ctx.save();
-  ctx.fillStyle = '#f2f4f7';
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 2;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = '700 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.lineWidth = 3;
   for (const f of floaters) {
     const a = clamp(1 - f.t / 0.75, 0, 1);
     ctx.globalAlpha = a;
+    ctx.fillStyle = f.color || '#f2f4f7';
+    ctx.strokeText(f.txt, f.x, f.y);
     ctx.fillText(f.txt, f.x, f.y);
   }
   ctx.restore();

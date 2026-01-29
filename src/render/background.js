@@ -104,8 +104,16 @@ export const drawGround = (ctx, groundY, width, height, scrollX) => {
 
 export const drawScreenText = (ctx, width, height, title, subtitle, extra, alpha) => {
   ctx.save();
-  ctx.globalAlpha = clamp(alpha, 0, 1);
-  ctx.fillStyle = '#f2f4f7';
+  const a = clamp(alpha, 0, 1);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = `rgba(242, 244, 247, ${a})`;
+  ctx.strokeStyle = `rgba(0, 0, 0, ${0.55 * a})`;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.shadowColor = `rgba(0, 0, 0, ${0.5 * a})`;
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 2;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -113,14 +121,20 @@ export const drawScreenText = (ctx, width, height, title, subtitle, extra, alpha
   const cy = height / 2;
 
   ctx.font = '800 54px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.lineWidth = 6;
+  ctx.strokeText(title, cx, cy - 34);
   ctx.fillText(title, cx, cy - 34);
 
   if (extra) {
     ctx.font = '800 38px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.lineWidth = 5;
+    ctx.strokeText(extra, cx, cy + 18);
     ctx.fillText(extra, cx, cy + 18);
   }
 
   ctx.font = '600 20px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.lineWidth = 4;
+  ctx.strokeText(subtitle, cx, cy + (extra ? 62 : 34));
   ctx.fillText(subtitle, cx, cy + (extra ? 62 : 34));
   ctx.restore();
 };

@@ -117,9 +117,9 @@ export const updateReds = (reds, player, dt, move, deps) => {
       if (o.t >= 1) {
         reds.splice(i, 1);
         player.alive = false;
+        if (startLineBurst) startLineBurst(player.x, player.y, Math.max(0.7, (o.r0 || o.r) / 18));
         if (startHeadShatter) startHeadShatter(player.x, player.y, player.r);
-        else if (startLineBurst) startLineBurst(player.x, player.y, Math.max(0.7, (o.r0 || o.r) / 18));
-        else startBurst(player.x, player.y, 0.55);
+        if (!startLineBurst && !startHeadShatter) startBurst(player.x, player.y, 0.55);
         deps.state.value = 'dying';
         deps.showScore(false);
       }

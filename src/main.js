@@ -168,8 +168,19 @@ let scrollX = 0;
 const screenAnim = { active: false, t: 0, dur: 0.45 };
 
 const startBurstAt = (x, y, dur = 0.55) => startBurst(burst, x, y, rand, dur);
-const startLineBurstAt = (x, y, scale = 1, dur = 0.45) => startLineBurst(lineBurst, x, y, rand, scale, dur);
-const startHeadShatterAt = (x, y, r) => startHeadShatter(headShatter, x, y, r, rand, DEFAULT_PALETTE, groundY(), 1, clamp);
+const startLineBurstAt = (x, y, scale = 1, dur = 0.16) => startLineBurst(lineBurst, x, y, rand, scale, dur);
+const startHeadShatterAt = (x, y, r) => startHeadShatter(
+  headShatter,
+  x,
+  y,
+  r,
+  rand,
+  DEFAULT_PALETTE,
+  groundY(),
+  1,
+  clamp,
+  { sizeMin: 0.05, sizeMax: 0.10, maxPieceR: 10 }
+);
 const startNpcShatterAt = (x, y, r) => startHeadShatter(
   npcShatter,
   x,
@@ -178,9 +189,9 @@ const startNpcShatterAt = (x, y, r) => startHeadShatter(
   rand,
   NPC_PALETTE,
   groundY(),
-  0.7,
+  1,
   clamp,
-  { countScale: 0.6, countMin: 4, countMax: 8, sizeMin: 0.05, sizeMax: 0.09, fadeDur: 0.22, velScale: 1.1 }
+  { countScale: 0.6, countMin: 4, countMax: 8, sizeMin: 0.05, sizeMax: 0.09, fadeDur: 0.22, velScale: 1 }
 );
 
 const resetGameVars = () => {
@@ -223,6 +234,9 @@ const resetGameVars = () => {
   headShatter.pieces.length = 0;
   npcShatter.active = false;
   npcShatter.pieces.length = 0;
+  lineBurst.active = false;
+  lineBurst.t = 0;
+  lineBurst.puffs.length = 0;
 
   WORLD.speed = WORLD.baseSpeed;
   lastSpawnWorldX = -1e9;
@@ -267,10 +281,7 @@ const startStartTransition = () => {
 };
 
 const startRestartTransition = () => {
-  screenAnim.active = true;
-  screenAnim.t = 0;
-  screenAnim.dur = 0.45;
-  gameState.value = 'restartTransition';
+  beginGame();
 };
 
 const canSpawnNow = () => {
@@ -455,7 +466,7 @@ const spawnBlue = () => {
 };
 
 const getScreenAlpha = () => {
-  if (gameState.value === 'startTransition' || gameState.value === 'restartTransition') {
+  if (gameState.value === 'startTransition') {
     const t = screenAnim.t;
     return 1 - easeInOut(t);
   }
@@ -565,7 +576,6 @@ const tick = (now) => {
   if (attackFlashT > 0) attackFlashT = Math.max(0, attackFlashT - dt);
 
   updateDifficulty();
-  scrollX += WORLD.speed * dt;
 
   updateBurst(burst, dt, clamp);
   updateShatter(headShatter, dt);
@@ -582,7 +592,8 @@ const tick = (now) => {
     }
   }
 
-  if (gameState.value === 'playing') {
+  if (gameState.value === 'playing' || gameState.value === 'start' || gameState.value === 'startTransition') {
+    scrollX += WORLD.speed * dt;
     if (inputHeld) {
       const heldMs = performance.now() - inputHeldAt;
       player.squashTarget = (heldMs > SQUASH.tapMs) ? SQUASH.y : 1;
@@ -732,7 +743,7 @@ const tick = (now) => {
     } else {
       player.mouth.dir = lerpAngle(player.mouth.dir, targetAngle, 1 - Math.pow(0.001, dt));
     }
-  } else {
+  } else if (gameState.value !== 'dying' && gameState.value !== 'gameover') {
     const move = WORLD.speed * dt;
     driftNPCs(npcs, move);
     driftReds(reds, move);
@@ -760,29 +771,32 @@ const draw = () => {
 
   drawGround(ctx, groundY(), w, h, scrollX);
 
-  for (const o of reds) {
-    drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
+  const showEntities = !(gameState.value === 'start' || gameState.value === 'startTransition');
+  if (showEntities) {
+    for (const o of reds) {
+      drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
+    }
+
+    ctx.fillStyle = '#ffbf4a';
+    for (const o of blues) {
+      drawStar(ctx, o.x, o.y, Math.max(0, o.r));
+    }
+
+    for (const n of npcs) {
+      drawCharacter(ctx, n.x, n.y, n.r, n.mouth.dir, n.mouth.open, n.emotion, 1, clamp, lerp);
+    }
+
+    if (gameState.value === 'playing' && player.r > 0.3) {
+      drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY);
+    }
+
+    drawFloaters(ctx, floaters, clamp);
+
+    if (burst.active) drawBurst(ctx, burst, lerp);
+    if (headShatter.active) drawShatter(ctx, headShatter);
+    if (npcShatter.active) drawShatter(ctx, npcShatter);
+    if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
   }
-
-  ctx.fillStyle = '#ffbf4a';
-  for (const o of blues) {
-    drawStar(ctx, o.x, o.y, Math.max(0, o.r));
-  }
-
-  for (const n of npcs) {
-    drawCharacter(ctx, n.x, n.y, n.r, n.mouth.dir, n.mouth.open, n.emotion, 1, clamp, lerp);
-  }
-
-  if (gameState.value === 'playing' && player.r > 0.3) {
-    drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY);
-  }
-
-  drawFloaters(ctx, floaters, clamp);
-
-  if (burst.active) drawBurst(ctx, burst, lerp);
-  if (headShatter.active) drawShatter(ctx, headShatter);
-  if (npcShatter.active) drawShatter(ctx, npcShatter);
-  if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
 
   if (debugHUD) {
     const d = difficulty01();
