@@ -2,7 +2,7 @@ import { clamp, lerp } from '../utils/math.js';
 
 const player2Canvas = document.createElement('canvas');
 const player2Ctx = player2Canvas.getContext('2d');
-const DEFAULT_PALETTE = {
+export const DEFAULT_PALETTE = {
   body: '#57dbe2',
   bodyAccent: '#52cfd6',
   lips: '#ff8f92',

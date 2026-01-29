@@ -1,8 +1,8 @@
 import { PHYS, SQUASH, STAND, WORLD, EAT, HAZARD, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
 import { clamp, rand, lerp, easeInOut, dist, lerpAngle } from './utils/math.js';
 import { makeStars, drawStars, drawSky, drawHills, drawGround, drawScreenText } from './render/background.js';
-import { createBurst, startBurst, updateBurst, drawBurst, createLineBurst, startLineBurst, updateLineBurst, drawLineBurst, createFloaters, popText, updateFloaters, drawFloaters } from './render/effects.js';
-import { createPlayer, drawPlayer2 } from './entities/player.js';
+import { createBurst, startBurst, updateBurst, drawBurst, createShatter, startHeadShatter, updateShatter, drawShatter, createLineBurst, startLineBurst, updateLineBurst, drawLineBurst, createFloaters, popText, updateFloaters, drawFloaters } from './render/effects.js';
+import { createPlayer, drawPlayer2, DEFAULT_PALETTE } from './entities/player.js';
 import { updateMouth, triggerChomp } from './entities/mouth.js';
 import { makeNPC, updateNPCs, driftNPCs, drawCharacter } from './entities/npc.js';
 import { makeRed, updateReds, driftReds, drawDynamiteBomb } from './entities/hazards.js';
@@ -15,6 +15,7 @@ const scoreEl = document.getElementById('score');
 const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition
 
 const burst = createBurst();
+const headShatter = createShatter();
 const lineBurst = createLineBurst();
 const floaters = createFloaters();
 
@@ -167,6 +168,7 @@ const screenAnim = { active: false, t: 0, dur: 0.45 };
 
 const startBurstAt = (x, y, dur = 0.55) => startBurst(burst, x, y, rand, dur);
 const startLineBurstAt = (x, y, scale = 1, dur = 0.45) => startLineBurst(lineBurst, x, y, rand, scale, dur);
+const startHeadShatterAt = (x, y, r) => startHeadShatter(headShatter, x, y, r, rand, DEFAULT_PALETTE, groundY(), 1, clamp);
 
 const resetGameVars = () => {
   npcs.length = 0;
@@ -204,6 +206,8 @@ const resetGameVars = () => {
   burst.active = false;
   burst.t = 0;
   burst.particles.length = 0;
+  headShatter.active = false;
+  headShatter.pieces.length = 0;
 
   WORLD.speed = WORLD.baseSpeed;
   lastSpawnWorldX = -1e9;
@@ -238,14 +242,12 @@ const beginGameOver = () => {
   screenAnim.active = true;
   screenAnim.t = 0;
   screenAnim.dur = 0.45;
-  startBurstAt(innerWidth / 2, innerHeight / 2, 0.55);
 };
 
 const startStartTransition = () => {
   screenAnim.active = true;
   screenAnim.t = 0;
   screenAnim.dur = 0.45;
-  startBurstAt(innerWidth / 2, innerHeight / 2, 0.55);
   gameState.value = 'startTransition';
 };
 
@@ -253,7 +255,6 @@ const startRestartTransition = () => {
   screenAnim.active = true;
   screenAnim.t = 0;
   screenAnim.dur = 0.45;
-  startBurstAt(innerWidth / 2, innerHeight / 2, 0.55);
   gameState.value = 'restartTransition';
 };
 
@@ -552,6 +553,7 @@ const tick = (now) => {
   scrollX += WORLD.speed * dt;
 
   updateBurst(burst, dt, clamp);
+  updateShatter(headShatter, dt);
   updateLineBurst(lineBurst, dt, clamp);
   updateFloaters(floaters, dt);
 
@@ -653,6 +655,7 @@ const tick = (now) => {
       dist,
       startBurst: startBurstAt,
       startLineBurst: startLineBurstAt,
+      startHeadShatter: startHeadShatterAt,
       state: gameState,
       showScore,
       groundY,
@@ -691,7 +694,7 @@ const tick = (now) => {
       player.r = lerp(player._beingEaten.r0, 0, tt);
       if (player._beingEaten.t >= 1) {
         player.alive = false;
-        startBurstAt(player._beingEaten.tx, player._beingEaten.ty, 0.55);
+        startHeadShatterAt(player._beingEaten.tx, player._beingEaten.ty, player._beingEaten.r0);
         gameState.value = 'dying';
         showScore(false);
         player._beingEaten = null;
@@ -760,6 +763,7 @@ const draw = () => {
   drawFloaters(ctx, floaters, clamp);
 
   if (burst.active) drawBurst(ctx, burst, lerp);
+  if (headShatter.active) drawShatter(ctx, headShatter);
   if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
 
   if (debugHUD) {

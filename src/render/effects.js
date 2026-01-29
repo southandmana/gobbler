@@ -1,13 +1,12 @@
 export const createBurst = () => ({ active: false, t: 0, dur: 0.55, x: 0, y: 0, particles: [] });
+export const createShatter = () => ({ active: false, pieces: [] });
 export const createLineBurst = () => ({
   active: false,
   t: 0,
-  dur: 0.42,
+  dur: 0.20,
   x: 0,
   y: 0,
   scale: 1,
-  spikes: [],
-  inner: [],
   puffs: [],
 });
 
@@ -29,37 +28,52 @@ export const startBurst = (burst, x, y, rand, dur = 0.55) => {
   }
 };
 
-export const startLineBurst = (burst, x, y, rand, scale = 1, dur = 0.42) => {
+export const startLineBurst = (burst, x, y, rand, scale = 1, dur = 0.20) => {
   burst.active = true;
   burst.t = 0;
   burst.dur = dur;
   burst.x = x;
   burst.y = y;
   burst.scale = scale;
-  burst.spikes.length = 0;
-  burst.inner.length = 0;
   burst.puffs.length = 0;
 
-  const spikeCount = 12;
-  for (let i = 0; i < spikeCount; i++) {
-    const a = (i / spikeCount) * Math.PI * 2 + rand(-0.12, 0.12);
-    const r = rand(18, 30) * (i % 2 ? 1.0 : 1.25);
-    burst.spikes.push({ a, r });
-  }
-
-  const innerCount = 10;
-  for (let i = 0; i < innerCount; i++) {
-    const a = (i / innerCount) * Math.PI * 2 + rand(-0.10, 0.10);
-    const r = rand(10, 18);
-    burst.inner.push({ a, r });
-  }
-
-  const puffCount = 4;
+  const puffCount = 6;
   for (let i = 0; i < puffCount; i++) {
     burst.puffs.push({
       a: rand(0, Math.PI * 2),
-      r: rand(10, 16),
-      d: rand(18, 32),
+      r: rand(8, 14),
+      d: rand(16, 28),
+    });
+  }
+};
+
+export const startHeadShatter = (shatter, x, y, r, rand, palette, groundY, scale = 1, clamp) => {
+  shatter.active = true;
+  shatter.pieces.length = 0;
+  const colors = [
+    palette.body,
+    palette.bodyAccent || palette.body,
+    palette.outline || palette.body,
+  ];
+
+  const count = clamp
+    ? clamp(Math.round(r * 0.45), 8, 16)
+    : Math.max(8, Math.min(16, Math.round(r * 0.45)));
+  for (let i = 0; i < count; i++) {
+    const a = rand(0, Math.PI * 2);
+    const spd = rand(160, 360) * scale;
+    shatter.pieces.push({
+      x,
+      y,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - rand(40, 160),
+      r: rand(0.06, 0.12) * r,
+      color: colors[i % colors.length],
+      outline: palette.outline || null,
+      groundY,
+      hit: false,
+      fadeT: 0,
+      alpha: 1,
     });
   }
 };
@@ -68,6 +82,35 @@ export const updateBurst = (burst, dt, clamp) => {
   if (!burst.active) return;
   burst.t = clamp(burst.t + dt / burst.dur, 0, 1);
   if (burst.t >= 1) burst.active = false;
+};
+
+export const updateShatter = (shatter, dt) => {
+  if (!shatter.active) return;
+  const gravity = 900;
+  for (let i = shatter.pieces.length - 1; i >= 0; i--) {
+    const p = shatter.pieces[i];
+    p.vy += gravity * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    const floor = p.groundY - p.r;
+    if (p.y > floor) {
+      p.y = floor;
+      if (!p.hit) p.hit = true;
+      p.vy = -p.vy * 0.35;
+      p.vx *= 0.65;
+      if (Math.abs(p.vy) < 50) p.vy = 0;
+    }
+
+    if (p.hit) {
+      p.fadeT += dt;
+      p.alpha = Math.max(0, 1 - p.fadeT / 0.6);
+      if (p.alpha <= 0) {
+        shatter.pieces.splice(i, 1);
+      }
+    }
+  }
+  if (shatter.pieces.length === 0) shatter.active = false;
 };
 
 export const updateLineBurst = (burst, dt, clamp) => {
@@ -102,6 +145,26 @@ export const drawBurst = (ctx, burst, lerp) => {
   ctx.globalAlpha = 1;
 };
 
+export const drawShatter = (ctx, shatter) => {
+  if (!shatter.active) return;
+  ctx.save();
+  for (const p of shatter.pieces) {
+    ctx.globalAlpha = p.alpha;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+    if (p.outline) {
+      ctx.strokeStyle = p.outline;
+      ctx.lineWidth = Math.max(1, p.r * 0.3);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(0, p.r - ctx.lineWidth * 0.5), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+};
+
 export const drawLineBurst = (ctx, burst, lerp) => {
   const t = burst.t;
   const x = burst.x;
@@ -110,24 +173,12 @@ export const drawLineBurst = (ctx, burst, lerp) => {
   const s = lerp(0.25, 1.2, ease) * (burst.scale || 1);
   const a = 1 - t;
 
-  const drawPoly = (pts) => {
-    if (!pts.length) return;
-    ctx.beginPath();
-    const first = pts[0];
-    ctx.moveTo(Math.cos(first.a) * first.r, Math.sin(first.a) * first.r);
-    for (let i = 1; i < pts.length; i++) {
-      const p = pts[i];
-      ctx.lineTo(Math.cos(p.a) * p.r, Math.sin(p.a) * p.r);
-    }
-    ctx.closePath();
-  };
-
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(s, s);
   ctx.globalAlpha = a;
 
-  // Soft puffs behind the flash.
+  // Soft puffs around the flash.
   ctx.fillStyle = 'rgba(255, 214, 186, 0.55)';
   for (const p of burst.puffs) {
     ctx.beginPath();
@@ -135,10 +186,10 @@ export const drawLineBurst = (ctx, burst, lerp) => {
     ctx.fill();
   }
 
-  // Outer spiky flash.
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  drawPoly(burst.spikes);
+  // Round flash body.
+  const outerR = lerp(10, 28, ease);
+  ctx.beginPath();
+  ctx.arc(0, 0, outerR, 0, Math.PI * 2);
   ctx.fillStyle = '#ff6b4a';
   ctx.fill();
   ctx.strokeStyle = '#d81818';
@@ -146,7 +197,9 @@ export const drawLineBurst = (ctx, burst, lerp) => {
   ctx.stroke();
 
   // Inner warm core.
-  drawPoly(burst.inner);
+  const innerR = lerp(6, 16, ease);
+  ctx.beginPath();
+  ctx.arc(0, 0, innerR, 0, Math.PI * 2);
   ctx.fillStyle = '#ffd24a';
   ctx.fill();
 

@@ -8,7 +8,7 @@ export const driftReds = (reds, move) => {
 };
 
 export const updateReds = (reds, player, dt, move, deps) => {
-  const { EAT, HAZARD, triggerChomp, clamp, easeInOut, lerp, startBurst, startLineBurst, groundY } = deps;
+  const { EAT, HAZARD, triggerChomp, clamp, easeInOut, lerp, startBurst, startLineBurst, startHeadShatter, groundY } = deps;
   const deflectSpeed = HAZARD.deflectSpeed;
   const deflectMinVxRatio = HAZARD.deflectMinVxRatio;
   for (let i = reds.length - 1; i >= 0; i--) {
@@ -117,7 +117,9 @@ export const updateReds = (reds, player, dt, move, deps) => {
       if (o.t >= 1) {
         reds.splice(i, 1);
         player.alive = false;
-        startBurst(player.x, player.y, 0.55);
+        if (startHeadShatter) startHeadShatter(player.x, player.y, player.r);
+        else if (startLineBurst) startLineBurst(player.x, player.y, Math.max(0.7, (o.r0 || o.r) / 18));
+        else startBurst(player.x, player.y, 0.55);
         deps.state.value = 'dying';
         deps.showScore(false);
       }
