@@ -61,23 +61,38 @@ export const drawStar = (ctx, x, y, r) => {
 
   const spikes = 5;
   const outer = rr * 1.10;
-  const inner = rr * 0.50;
+  const inner = rr * 0.70;
 
-  ctx.beginPath();
-  let rot = -Math.PI / 2;
-  const step = Math.PI / spikes;
+  const drawStarPath = (o, i) => {
+    ctx.beginPath();
+    let rot = -Math.PI / 2;
+    const step = Math.PI / spikes;
+    ctx.moveTo(Math.cos(rot) * o, Math.sin(rot) * o);
+    for (let k = 0; k < spikes; k++) {
+      ctx.lineTo(Math.cos(rot + step) * i, Math.sin(rot + step) * i);
+      rot += step;
+      ctx.lineTo(Math.cos(rot + step) * o, Math.sin(rot + step) * o);
+      rot += step;
+    }
+    ctx.closePath();
+  };
 
-  ctx.moveTo(Math.cos(rot) * outer, Math.sin(rot) * outer);
-  for (let i = 0; i < spikes; i++) {
-    ctx.lineTo(Math.cos(rot + step) * inner, Math.sin(rot + step) * inner);
-    rot += step;
-    ctx.lineTo(Math.cos(rot + step) * outer, Math.sin(rot + step) * outer);
-    rot += step;
-  }
-  ctx.closePath();
+  // Dark outline drawn slightly larger so it sits outside the fill.
+  drawStarPath(outer * 1.05, inner * 1.05);
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(2, rr * 0.18);
+  ctx.strokeStyle = '#c9932e';
+  ctx.stroke();
+
+  // Fill on top to eliminate the inner dark stroke.
+  drawStarPath(outer, inner);
   ctx.fill();
 
-  ctx.lineWidth = Math.max(1, rr * 0.12);
+  // Soft highlight stroke.
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1, rr * 0.08);
   ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.stroke();
 

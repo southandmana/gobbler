@@ -1,7 +1,7 @@
 import { PHYS, SQUASH, STAND, WORLD, EAT, HAZARD, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
 import { clamp, rand, lerp, easeInOut, dist, lerpAngle } from './utils/math.js';
 import { makeStars, drawStars, drawSky, drawHills, drawGround, drawScreenText } from './render/background.js';
-import { createBurst, startBurst, updateBurst, drawBurst, createFloaters, popText, updateFloaters, drawFloaters } from './render/effects.js';
+import { createBurst, startBurst, updateBurst, drawBurst, createLineBurst, startLineBurst, updateLineBurst, drawLineBurst, createFloaters, popText, updateFloaters, drawFloaters } from './render/effects.js';
 import { createPlayer, drawPlayer2 } from './entities/player.js';
 import { updateMouth, triggerChomp } from './entities/mouth.js';
 import { makeNPC, updateNPCs, driftNPCs, drawCharacter } from './entities/npc.js';
@@ -15,6 +15,7 @@ const scoreEl = document.getElementById('score');
 const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition
 
 const burst = createBurst();
+const lineBurst = createLineBurst();
 const floaters = createFloaters();
 
 const resize = () => {
@@ -165,6 +166,7 @@ let scrollX = 0;
 const screenAnim = { active: false, t: 0, dur: 0.45 };
 
 const startBurstAt = (x, y, dur = 0.55) => startBurst(burst, x, y, rand, dur);
+const startLineBurstAt = (x, y, scale = 1, dur = 0.45) => startLineBurst(lineBurst, x, y, rand, scale, dur);
 
 const resetGameVars = () => {
   npcs.length = 0;
@@ -550,6 +552,7 @@ const tick = (now) => {
   scrollX += WORLD.speed * dt;
 
   updateBurst(burst, dt, clamp);
+  updateLineBurst(lineBurst, dt, clamp);
   updateFloaters(floaters, dt);
 
   if (screenAnim.active) {
@@ -649,6 +652,7 @@ const tick = (now) => {
       lerp,
       dist,
       startBurst: startBurstAt,
+      startLineBurst: startLineBurstAt,
       state: gameState,
       showScore,
       groundY,
@@ -756,6 +760,7 @@ const draw = () => {
   drawFloaters(ctx, floaters, clamp);
 
   if (burst.active) drawBurst(ctx, burst, lerp);
+  if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
 
   if (debugHUD) {
     const d = difficulty01();

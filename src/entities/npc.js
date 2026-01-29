@@ -5,6 +5,7 @@ const NPC_PALETTE = {
   bodyAccent: '#49c4cd',
   lips: '#ff8f92',
   eye: '#3f2b00',
+  outline: '#46c3cb',
 };
 
 const resolveFacing = (dirRad) => {

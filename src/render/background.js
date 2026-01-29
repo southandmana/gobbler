@@ -8,7 +8,9 @@ export const makeStars = (n, rand) => {
 
 export const drawStars = (ctx, stars, mul, scrollX, groundY, width) => {
   const off = (scrollX * mul) % width;
-  ctx.fillStyle = '#d5d9e8';
+  ctx.save();
+  ctx.globalAlpha = 0.6;
+  ctx.fillStyle = '#ffffff';
   for (const s of stars) {
     const x = (s.x * width - off + width) % width;
     const y = s.y * (groundY - 30);
@@ -16,22 +18,23 @@ export const drawStars = (ctx, stars, mul, scrollX, groundY, width) => {
     ctx.arc(x, y, s.r, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
 };
 
 export const drawSky = (ctx, width, height) => {
   const g = ctx.createLinearGradient(0, 0, 0, height);
-  g.addColorStop(0, '#1c2230');
-  g.addColorStop(0.55, '#2a303b');
-  g.addColorStop(1, '#3a3943');
+  g.addColorStop(0, '#cfe0f6');
+  g.addColorStop(0.55, '#ded9f2');
+  g.addColorStop(1, '#f3ecf6');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, width, height);
 };
 
 export const drawHills = (ctx, width, groundY, scrollX) => {
   const layers = [
-    { base: groundY - 210, amp: 16, wavelength: 680, speed: 0.05, alpha: 1.0, color: '#2b3336' },
-    { base: groundY - 165, amp: 20, wavelength: 560, speed: 0.08, alpha: 1.0, color: '#30393c' },
-    { base: groundY - 125, amp: 24, wavelength: 460, speed: 0.12, alpha: 1.0, color: '#364042' },
+    { base: groundY - 210, amp: 16, wavelength: 680, speed: 0.05, alpha: 0.55, color: '#d7c9e7' },
+    { base: groundY - 165, amp: 20, wavelength: 560, speed: 0.08, alpha: 0.65, color: '#e6c5d7' },
+    { base: groundY - 125, amp: 24, wavelength: 460, speed: 0.12, alpha: 0.75, color: '#f0dcc6' },
   ];
 
   const step = 12;
@@ -72,7 +75,7 @@ export const drawHills = (ctx, width, groundY, scrollX) => {
 
 export const drawGround = (ctx, groundY, width, height, scrollX) => {
   const groundH = Math.max(20, height - groundY);
-  const colors = ['#2d2827', '#332d2b', '#393230', '#3f3734', '#453c38'];
+  const colors = ['#e59a91', '#e8b37d', '#ead98a', '#b9d6a2', '#9fd3cc', '#9fb9e6', '#b59ddf'];
   const rows = colors.length;
   const rowH = groundH / rows;
   const brickW = Math.max(72, Math.min(140, width * 0.16));

@@ -8,7 +8,7 @@ export const driftReds = (reds, move) => {
 };
 
 export const updateReds = (reds, player, dt, move, deps) => {
-  const { EAT, HAZARD, triggerChomp, clamp, easeInOut, lerp, startBurst, groundY } = deps;
+  const { EAT, HAZARD, triggerChomp, clamp, easeInOut, lerp, startBurst, startLineBurst, groundY } = deps;
   const deflectSpeed = HAZARD.deflectSpeed;
   const deflectMinVxRatio = HAZARD.deflectMinVxRatio;
   for (let i = reds.length - 1; i >= 0; i--) {
@@ -57,6 +57,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
       const minY = o.r;
       const maxY = groundY() - o.r;
       let hitEdge = false;
+      let hitGround = false;
 
       if (o.x < minX || o.x > maxX) {
         hitEdge = true;
@@ -67,6 +68,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
       }
       if (o.y < minY || o.y > maxY) {
         hitEdge = true;
+        if (o.y > maxY) hitGround = true;
         if (o.bounces === 0) {
           o.vy = -o.vy;
           o.y = clamp(o.y, minY, maxY);
@@ -77,7 +79,8 @@ export const updateReds = (reds, player, dt, move, deps) => {
         if (o.bounces === 0) {
           o.bounces = 1;
         } else {
-          startBurst(o.x, o.y, 0.45);
+          if (hitGround && startLineBurst) startLineBurst(o.x, o.y, Math.max(0.6, o.r / 18));
+          else startBurst(o.x, o.y, 0.45);
           reds.splice(i, 1);
           continue;
         }
@@ -133,6 +136,15 @@ export const drawDynamiteBomb = (ctx, x, y, r) => {
   ctx.beginPath();
   ctx.ellipse(0, 0, rr * 1.02, rr * 0.92, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = '#d81818';
+  ctx.lineWidth = Math.max(2, rr * 0.10);
+  const osx = rr * 1.02 - ctx.lineWidth * 0.5;
+  const osy = rr * 0.92 - ctx.lineWidth * 0.5;
+  if (osx > 0 && osy > 0) {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, osx, osy, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   const bx = -rr * 0.95, by = -rr * 0.18, bw = rr * 1.9, bh = rr * 0.36, br = rr * 0.16;
