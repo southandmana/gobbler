@@ -1,6 +1,6 @@
 import { PHYS, SQUASH, STAND, WORLD, EAT, HAZARD, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
 import { clamp, rand, lerp, easeInOut, dist, lerpAngle } from './utils/math.js';
-import { makeStars, drawStars, drawGround, drawScreenText } from './render/background.js';
+import { makeStars, drawStars, drawSky, drawHills, drawGround, drawScreenText } from './render/background.js';
 import { createBurst, startBurst, updateBurst, drawBurst, createFloaters, popText, updateFloaters, drawFloaters } from './render/effects.js';
 import { createPlayer, drawPlayer2 } from './entities/player.js';
 import { updateMouth, triggerChomp } from './entities/mouth.js';
@@ -160,7 +160,6 @@ const encounterQueue = [];
 let forceEdibleNext = false;
 
 const starsFar = makeStars(70, rand);
-const starsNear = makeStars(50, rand);
 let scrollX = 0;
 
 const screenAnim = { active: false, t: 0, dur: 0.45 };
@@ -729,13 +728,13 @@ const draw = () => {
   const h = innerHeight;
   ctx.clearRect(0, 0, w, h);
 
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, w, h);
+  drawSky(ctx, w, h);
 
   drawStars(ctx, starsFar, 0.20, scrollX, groundY(), w);
-  drawStars(ctx, starsNear, 0.45, scrollX, groundY(), w);
 
-  drawGround(ctx, groundY(), w, scrollX);
+  drawHills(ctx, w, groundY(), scrollX);
+
+  drawGround(ctx, groundY(), w, h, scrollX);
 
   for (const o of reds) {
     drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
