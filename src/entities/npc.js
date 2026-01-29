@@ -1,6 +1,6 @@
 import { drawPlayer2 } from './player.js';
 
-const NPC_PALETTE = {
+export const NPC_PALETTE = {
   body: '#4fcfd8',
   bodyAccent: '#49c4cd',
   lips: '#ff8f92',
@@ -52,6 +52,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
     easeInOut,
     lerpAngle,
     dist,
+    startHeadShatter,
   } = deps;
 
   let nearestDangerDist = Infinity;
@@ -117,6 +118,13 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
 
       if (n.t >= 1) {
         npcs.splice(i, 1);
+        if (startHeadShatter) {
+          const ang = (player.mouth && typeof player.mouth.dir === 'number') ? player.mouth.dir : 0;
+          const dist = player.r * 0.55;
+          const mx = player.x + Math.cos(ang) * dist;
+          const my = player.y + Math.sin(ang) * dist;
+          startHeadShatter(mx, my, n.r0);
+        }
         addScore(n.pts, player.x, player.y - player.r - 10);
         const grow = GROW.baseStep + GROW.fromRadius(n.r0);
         player.r = clamp(player.r + grow, player.baseR, player.maxR);

@@ -4,7 +4,7 @@ import { makeStars, drawStars, drawSky, drawHills, drawGround, drawScreenText } 
 import { createBurst, startBurst, updateBurst, drawBurst, createShatter, startHeadShatter, updateShatter, drawShatter, createLineBurst, startLineBurst, updateLineBurst, drawLineBurst, createFloaters, popText, updateFloaters, drawFloaters } from './render/effects.js';
 import { createPlayer, drawPlayer2, DEFAULT_PALETTE } from './entities/player.js';
 import { updateMouth, triggerChomp } from './entities/mouth.js';
-import { makeNPC, updateNPCs, driftNPCs, drawCharacter } from './entities/npc.js';
+import { makeNPC, updateNPCs, driftNPCs, drawCharacter, NPC_PALETTE } from './entities/npc.js';
 import { makeRed, updateReds, driftReds, drawDynamiteBomb } from './entities/hazards.js';
 import { makeBlue, updateBlues, driftBlues, drawStar } from './entities/powerups.js';
 
@@ -16,6 +16,7 @@ const gameState = { value: 'start' }; // start | startTransition | playing | pau
 
 const burst = createBurst();
 const headShatter = createShatter();
+const npcShatter = createShatter();
 const lineBurst = createLineBurst();
 const floaters = createFloaters();
 
@@ -169,6 +170,18 @@ const screenAnim = { active: false, t: 0, dur: 0.45 };
 const startBurstAt = (x, y, dur = 0.55) => startBurst(burst, x, y, rand, dur);
 const startLineBurstAt = (x, y, scale = 1, dur = 0.45) => startLineBurst(lineBurst, x, y, rand, scale, dur);
 const startHeadShatterAt = (x, y, r) => startHeadShatter(headShatter, x, y, r, rand, DEFAULT_PALETTE, groundY(), 1, clamp);
+const startNpcShatterAt = (x, y, r) => startHeadShatter(
+  npcShatter,
+  x,
+  y,
+  r,
+  rand,
+  NPC_PALETTE,
+  groundY(),
+  0.7,
+  clamp,
+  { countScale: 0.6, countMin: 4, countMax: 8, sizeMin: 0.05, sizeMax: 0.09, fadeDur: 0.22, velScale: 1.1 }
+);
 
 const resetGameVars = () => {
   npcs.length = 0;
@@ -208,6 +221,8 @@ const resetGameVars = () => {
   burst.particles.length = 0;
   headShatter.active = false;
   headShatter.pieces.length = 0;
+  npcShatter.active = false;
+  npcShatter.pieces.length = 0;
 
   WORLD.speed = WORLD.baseSpeed;
   lastSpawnWorldX = -1e9;
@@ -554,6 +569,7 @@ const tick = (now) => {
 
   updateBurst(burst, dt, clamp);
   updateShatter(headShatter, dt);
+  updateShatter(npcShatter, dt);
   updateLineBurst(lineBurst, dt, clamp);
   updateFloaters(floaters, dt);
 
@@ -637,6 +653,7 @@ const tick = (now) => {
       easeInOut,
       lerpAngle,
       dist,
+      startHeadShatter: startNpcShatterAt,
       onBite: (x, y) => {
         biteDir = Math.atan2(y - player.y, x - player.x);
         biteT = 0.12;
@@ -764,6 +781,7 @@ const draw = () => {
 
   if (burst.active) drawBurst(ctx, burst, lerp);
   if (headShatter.active) drawShatter(ctx, headShatter);
+  if (npcShatter.active) drawShatter(ctx, npcShatter);
   if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
 
   if (debugHUD) {

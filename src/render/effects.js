@@ -47,7 +47,7 @@ export const startLineBurst = (burst, x, y, rand, scale = 1, dur = 0.20) => {
   }
 };
 
-export const startHeadShatter = (shatter, x, y, r, rand, palette, groundY, scale = 1, clamp) => {
+export const startHeadShatter = (shatter, x, y, r, rand, palette, groundY, scale = 1, clamp, opts = null) => {
   shatter.active = true;
   shatter.pieces.length = 0;
   const colors = [
@@ -56,23 +56,33 @@ export const startHeadShatter = (shatter, x, y, r, rand, palette, groundY, scale
     palette.outline || palette.body,
   ];
 
+  const countScale = (opts && opts.countScale) || 1;
+  const countMin = (opts && opts.countMin) || 8;
+  const countMax = (opts && opts.countMax) || 16;
+  const sizeMin = (opts && opts.sizeMin) || 0.06;
+  const sizeMax = (opts && opts.sizeMax) || 0.12;
+  const fadeDur = (opts && opts.fadeDur) || 0.6;
+  const velScale = (opts && opts.velScale) || 1;
+
+  const countRaw = Math.round(r * 0.45 * countScale);
   const count = clamp
-    ? clamp(Math.round(r * 0.45), 8, 16)
-    : Math.max(8, Math.min(16, Math.round(r * 0.45)));
+    ? clamp(countRaw, countMin, countMax)
+    : Math.max(countMin, Math.min(countMax, countRaw));
   for (let i = 0; i < count; i++) {
     const a = rand(0, Math.PI * 2);
-    const spd = rand(160, 360) * scale;
+    const spd = rand(260, 520) * scale * velScale;
     shatter.pieces.push({
       x,
       y,
       vx: Math.cos(a) * spd,
       vy: Math.sin(a) * spd - rand(40, 160),
-      r: rand(0.06, 0.12) * r,
+      r: rand(sizeMin, sizeMax) * r * scale,
       color: colors[i % colors.length],
       outline: palette.outline || null,
       groundY,
       hit: false,
       fadeT: 0,
+      fadeDur,
       alpha: 1,
     });
   }
@@ -104,7 +114,7 @@ export const updateShatter = (shatter, dt) => {
 
     if (p.hit) {
       p.fadeT += dt;
-      p.alpha = Math.max(0, 1 - p.fadeT / 0.6);
+      p.alpha = Math.max(0, 1 - p.fadeT / (p.fadeDur || 0.6));
       if (p.alpha <= 0) {
         shatter.pieces.splice(i, 1);
       }
