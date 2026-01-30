@@ -56,6 +56,19 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
     pctx.stroke();
   }
 
+  // Wing-like mark on the head (soft bean shape).
+  const wingW = r * 0.95;
+  const wingH = r * 0.6;
+  const tx = -r * 0.75;
+  const ty = r * 0.38;
+  pctx.save();
+  pctx.translate(tx, ty);
+  pctx.rotate(-1.05);
+  pctx.fillStyle = '#eac866';
+  drawWing(pctx, 0, 0, wingW, wingH);
+  pctx.fill();
+  pctx.restore();
+
 
   // Mouth geometry (simple bars)
   const mouthW = r * 1.30;
@@ -147,5 +160,36 @@ const roundRect = (c, x, y, w, h, r) => {
   c.arcTo(x, y + h, x, y + h - rr, rr);
   c.lineTo(x, y + rr);
   c.arcTo(x, y, x + rr, y, rr);
+  c.closePath();
+};
+
+const roundedPolygon = (c, pts, r) => {
+  const n = pts.length;
+  c.beginPath();
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i + n - 1) % n];
+    const p1 = pts[i];
+    const p2 = pts[(i + 1) % n];
+    const v1x = p0.x - p1.x;
+    const v1y = p0.y - p1.y;
+    const v2x = p2.x - p1.x;
+    const v2y = p2.y - p1.y;
+    const d1 = Math.hypot(v1x, v1y) || 1;
+    const d2 = Math.hypot(v2x, v2y) || 1;
+    const rr = Math.min(r, d1 * 0.45, d2 * 0.45);
+    const p1a = { x: p1.x + (v1x / d1) * rr, y: p1.y + (v1y / d1) * rr };
+    const p1b = { x: p1.x + (v2x / d2) * rr, y: p1.y + (v2y / d2) * rr };
+    if (i === 0) c.moveTo(p1a.x, p1a.y);
+    else c.lineTo(p1a.x, p1a.y);
+    c.quadraticCurveTo(p1.x, p1.y, p1b.x, p1b.y);
+  }
+  c.closePath();
+};
+
+const drawWing = (c, x, y, w, h) => {
+  const rx = w * 0.5;
+  const ry = h * 0.5;
+  c.beginPath();
+  c.ellipse(x + rx * 0.08, y, rx, ry, 0, 0, Math.PI * 2);
   c.closePath();
 };
