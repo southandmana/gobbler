@@ -1,7 +1,7 @@
 import { PHYS, SQUASH, STAND, WORLD, EAT, HAZARD, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
 import { clamp, rand, lerp, easeInOut, dist, lerpAngle } from './utils/math.js';
 import { makeStars, drawStars, drawSky, drawHills, drawGround, drawScreenText } from './render/background.js';
-import { createBurst, startBurst, updateBurst, drawBurst, createShatter, startHeadShatter, updateShatter, drawShatter, createLineBurst, startLineBurst, updateLineBurst, drawLineBurst, createFloaters, popText, updateFloaters, drawFloaters, createSparkles, startSparkles, updateSparkles, drawSparkles } from './render/effects.js';
+import { createBurst, startBurst, updateBurst, drawBurst, createShatter, startHeadShatter, updateShatter, drawShatter, createLineBurst, startLineBurst, updateLineBurst, drawLineBurst, createFloaters, popText, updateFloaters, drawFloaters, createSparkles, startSparkles, updateSparkles, drawSparkles, createDustPuffs, startDustPuff, updateDustPuffs, drawDustPuffs } from './render/effects.js';
 import { createPlayer, drawPlayer2, DEFAULT_PALETTE } from './entities/player.js';
 import { updateMouth, triggerChomp } from './entities/mouth.js';
 import { makeNPC, updateNPCs, driftNPCs, drawCharacter, NPC_PALETTE } from './entities/npc.js';
@@ -53,6 +53,7 @@ const npcShatter = createShatter();
 const lineBurst = createLineBurst();
 const floaters = createFloaters();
 const sparkles = createSparkles();
+const dustPuffs = createDustPuffs();
 
 const resize = () => {
   const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -77,6 +78,9 @@ let stressEase = 0;
 let debugHUD = false;
 let biteDir = 0;
 let biteT = 0;
+let dustTrailAcc = 0;
+let dustTrailGap = 22;
+let wasGrounded = false;
 const hudTrack = { init: {}, changed: {}, maxed: {} };
 const resetHudTrack = () => {
   hudTrack.init = {};
@@ -272,6 +276,10 @@ const resetGameVars = () => {
   lineBurst.t = 0;
   lineBurst.puffs.length = 0;
   sparkles.particles.length = 0;
+  dustPuffs.puffs.length = 0;
+  dustTrailAcc = 0;
+  dustTrailGap = 22;
+  wasGrounded = false;
 
   WORLD.speed = WORLD.baseSpeed;
   lastSpawnWorldX = -1e9;
@@ -291,6 +299,9 @@ const beginStartScreen = () => {
   screenAnim.active = false;
   burst.active = false;
   sparkles.particles.length = 0;
+  dustPuffs.puffs.length = 0;
+  dustTrailAcc = 0;
+  wasGrounded = false;
 };
 
 const beginGame = () => {
@@ -623,6 +634,7 @@ const tick = (now) => {
   updateLineBurst(lineBurst, dt, clamp);
   updateFloaters(floaters, dt);
   updateSparkles(sparkles, dt);
+  updateDustPuffs(dustPuffs, dt);
 
   if (screenAnim.active) {
     screenAnim.t = clamp(screenAnim.t + dt / screenAnim.dur, 0, 1);
@@ -634,7 +646,8 @@ const tick = (now) => {
   }
 
   if (gameState.value === 'playing') {
-    scrollX += WORLD.speed * dt;
+    const move = WORLD.speed * dt;
+    scrollX += move;
     if (inputHeld) {
       const heldMs = performance.now() - inputHeldAt;
       player.squashTarget = (heldMs > SQUASH.tapMs) ? SQUASH.y : 1;
@@ -680,6 +693,27 @@ const tick = (now) => {
         if (Math.abs(player.vy) < 60) player.vy = 0;
       }
 
+      const grounded = (Math.abs(player.y - floor) < 0.5) && Math.abs(player.vy) < 1;
+      if (grounded && !wasGrounded) {
+        const px = player.x + player.r * 0.15;
+        const py = groundY() + 8;
+        startDustPuff(dustPuffs, px, py, player.r * 1.8, rand);
+        dustTrailAcc = 0;
+      }
+      if (grounded && move > 0) {
+        dustTrailAcc += move;
+        while (dustTrailAcc >= dustTrailGap) {
+          const px = player.x + player.r * 0.15;
+          const py = groundY() + 8;
+          startDustPuff(dustPuffs, px, py, player.r * 1.8, rand);
+          dustTrailAcc -= dustTrailGap;
+          dustTrailGap = rand(18, 28);
+        }
+      } else {
+        dustTrailAcc = 0;
+      }
+      wasGrounded = grounded;
+
       if (player.y + (player.r * player.squashY) < 0) {
         player.alive = false;
         playPlayerOutsideSfx();
@@ -689,7 +723,6 @@ const tick = (now) => {
       }
     }
 
-    const move = WORLD.speed * dt;
     updateNPCs(npcs, player, dt, move, {
       groundY,
       EAT,
@@ -833,6 +866,8 @@ const draw = () => {
       ctx.fillStyle = '#ffbf4a';
       drawStar(ctx, o.x, o.y, Math.max(0, o.r), o.specks, waveT);
     }
+
+    drawDustPuffs(ctx, dustPuffs, lerp);
 
     for (const n of npcs) {
       drawCharacter(ctx, n.x, n.y, n.r, n.mouth.dir, n.mouth.open, n.emotion, 1, clamp, lerp);

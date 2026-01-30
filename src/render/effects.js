@@ -271,6 +271,79 @@ export const drawSparkles = (ctx, sparkles) => {
   ctx.restore();
 };
 
+export const createDustPuffs = () => ({ puffs: [] });
+
+export const startDustPuff = (dust, x, y, r, rand) => {
+  const flip = rand(-1, 1) < 0 ? -1 : 1;
+  const base = r * rand(0.75, 1.05);
+  const stepSize = 14;
+  const stepDrop = 0.12;
+  const steps = Math.max(0, Math.floor((base - 30) / stepSize));
+  const sizeAlpha = Math.max(0.2, 1 - steps * stepDrop);
+  dust.puffs.push({
+    x: x + rand(-4, 4),
+    y: y + rand(-3, 3),
+    r: base,
+    t: 0,
+    dur: rand(0.38, 0.5),
+    flip,
+    seed: rand(0, Math.PI * 2),
+    sx: rand(1.45, 1.9),
+    sy: rand(0.55, 0.85),
+    sizeAlpha,
+  });
+};
+
+export const updateDustPuffs = (dust, dt) => {
+  for (let i = dust.puffs.length - 1; i >= 0; i--) {
+    const p = dust.puffs[i];
+    p.t += dt;
+    if (p.t >= p.dur) dust.puffs.splice(i, 1);
+  }
+};
+
+export const drawDustPuffs = (ctx, dust, lerp) => {
+  if (!dust.puffs.length) return;
+  const sizes = [0.2, 0.55, 0.95, 1.25, 1.4, 1.35];
+  const alphas = [0.28, 0.45, 0.55, 0.48, 0.34, 0.18];
+  ctx.save();
+  for (const p of dust.puffs) {
+    const t = p.t / p.dur;
+    const frame = Math.min(sizes.length - 1, Math.floor(t * sizes.length));
+    const a = alphas[frame] * (p.sizeAlpha ?? 1);
+    const rise = lerp(0, -p.r * 0.45, t);
+    const jitter = Math.sin(p.seed + t * 6) * (p.r * 0.04);
+    const r = p.r * sizes[frame];
+
+    const cx = p.x + jitter;
+    const cy = p.y + rise;
+
+    // Puffy cloud cluster (Angry Birds-ish).
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(p.sx, p.sy);
+
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#f2e8db';
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.arc(p.flip * r * 0.55, r * 0.05, r * 0.7, 0, Math.PI * 2);
+    ctx.arc(-p.flip * r * 0.55, r * 0.08, r * 0.68, 0, Math.PI * 2);
+    ctx.arc(0, -r * 0.35, r * 0.62, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Slight shadow base to add volume.
+    ctx.globalAlpha = a * 0.55;
+    ctx.fillStyle = '#d7c7b4';
+    ctx.beginPath();
+    ctx.arc(p.flip * r * 0.2, r * 0.25, r * 0.6, 0, Math.PI * 2);
+    ctx.arc(-p.flip * r * 0.35, r * 0.22, r * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+};
+
 export const popText = (floaters, txt, x, y, color = null) => {
   const c = color || (typeof txt === 'string' && txt[0] === '-' ? '#ff2b2b' : '#f2f4f7');
   floaters.push({ x, y, txt, t: 0, color: c });
