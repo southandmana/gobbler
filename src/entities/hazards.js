@@ -8,7 +8,24 @@ export const driftReds = (reds, move) => {
 };
 
 export const updateReds = (reds, player, dt, move, deps) => {
-  const { EAT, HAZARD, triggerChomp, clamp, easeInOut, lerp, startBurst, startLineBurst, startHeadShatter, playBombLeavesSfx, playBombHitsGroundSfx, playEatBombSfx, playHitBombSfx, groundY } = deps;
+  const {
+    EAT,
+    HAZARD,
+    triggerChomp,
+    clamp,
+    easeInOut,
+    lerp,
+    startBurst,
+    startLineBurst,
+    startHeadShatter,
+    startNpcShatter,
+    playBombLeavesSfx,
+    playBombHitsGroundSfx,
+    playEatBombSfx,
+    playHitBombSfx,
+    groundY,
+    npcs,
+  } = deps;
   const deflectSpeed = HAZARD.deflectSpeed;
   const deflectMinVxRatio = HAZARD.deflectMinVxRatio;
   for (let i = reds.length - 1; i >= 0; i--) {
@@ -52,6 +69,25 @@ export const updateReds = (reds, player, dt, move, deps) => {
       o.x += o.vx * dt;
       o.y += o.vy * dt;
       o.vy += 900 * dt;
+
+      if (npcs && npcs.length) {
+        let exploded = false;
+        for (let j = npcs.length - 1; j >= 0; j--) {
+          const n = npcs[j];
+          const d = deps.dist(o.x, o.y, n.x, n.y);
+          if (d <= (o.r + n.r)) {
+            npcs.splice(j, 1);
+            if (playEatBombSfx) playEatBombSfx();
+            if (startLineBurst) startLineBurst(n.x, n.y, Math.max(0.7, o.r / 18));
+            if (startNpcShatter) startNpcShatter(n.x, n.y, n.r);
+            if (!startLineBurst && !startNpcShatter) startBurst(n.x, n.y, 0.55);
+            reds.splice(i, 1);
+            exploded = true;
+            break;
+          }
+        }
+        if (exploded) continue;
+      }
 
       const minX = o.r;
       const maxX = innerWidth - o.r;

@@ -723,6 +723,7 @@ const tick = (now) => {
       startBurst: startBurstAt,
       startLineBurst: startLineBurstAt,
       startHeadShatter: startHeadShatterAt,
+      startNpcShatter: startNpcShatterAt,
       playBombLeavesSfx,
       playBombHitsGroundSfx,
       playEatBombSfx,
@@ -730,6 +731,7 @@ const tick = (now) => {
       state: gameState,
       showScore,
       groundY,
+      npcs,
       attackActive: () => attackFlashT > 0,
       onBite: (x, y) => {
         biteDir = Math.atan2(y - player.y, x - player.x);
