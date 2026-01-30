@@ -500,18 +500,17 @@ const respawnAtCheckpoint = () => {
     finishExit = false;
     finishFadeEntities.active = false;
     finishFadeEntities.t = 0;
-    const resumeBossPhase = bossCheckpointHp < boss.hpMax;
-    cinematicUiHidden = !resumeBossPhase;
-    dialogueIndex = resumeBossPhase ? DIALOGUE.length : 0;
+    cinematicUiHidden = false;
+    dialogueIndex = DIALOGUE.length;
     dialogueChar = 0;
-    showHealthBar = resumeBossPhase;
-    scoreFade.active = resumeBossPhase;
+    showHealthBar = true;
+    scoreFade.active = false;
     scoreFade.t = 0;
     cutscenePending = false;
-    cutsceneFade.active = true;
-    cutsceneFade.phase = 'in';
+    cutsceneFade.active = false;
     cutsceneFade.t = 0;
-    setScoreOpacity(0);
+    cutsceneFade.phase = 'out';
+    setScoreOpacity(1);
     showScore(true);
     gameState.value = 'cutscene';
     updateDifficulty();
@@ -1084,6 +1083,9 @@ const tick = (now) => {
       finishExit = true;
       inputHeld = false;
       player.squashTarget = 1;
+      player.r = player.baseR;
+      if (player.y > groundY() - (player.r * player.squashY)) player.y = groundY() - (player.r * player.squashY);
+      startBurstAt(player.x, player.y, 0.45);
       npcT = 999;
       redT = 999;
       blueT = 999;
@@ -1452,12 +1454,13 @@ const draw = () => {
     const uiFade = finishFadeEntities.active
       ? (1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)))
       : (scoreFade.active ? easeInOut(clamp(scoreFade.t / scoreFade.dur, 0, 1)) : 1);
-    if (gameState.value === 'playing' || gameState.value === 'dying') {
+    const showBossUi = showHealthBar && (gameState.value === 'cutscene' || gameState.value === 'playing' || gameState.value === 'dying');
+    if ((gameState.value === 'playing' || gameState.value === 'dying') && !showBossUi) {
       if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
       drawProgressBar(ctx, w);
       if (uiFade < 1) ctx.restore();
     }
-    if (showHealthBar && (gameState.value === 'cutscene' || gameState.value === 'playing')) {
+    if (showBossUi) {
       if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
       drawHealthBar(ctx);
       if (uiFade < 1) ctx.restore();
