@@ -25,6 +25,9 @@ export const updateReds = (reds, player, dt, move, deps) => {
     playHitBombSfx,
     groundY,
     npcs,
+    boss,
+    bossActive,
+    onBossHit,
   } = deps;
   const deflectSpeed = HAZARD.deflectSpeed;
   const deflectMinVxRatio = HAZARD.deflectMinVxRatio;
@@ -87,6 +90,17 @@ export const updateReds = (reds, player, dt, move, deps) => {
           }
         }
         if (exploded) continue;
+      }
+
+      if (bossActive && boss) {
+        const squashY = (boss.squashY === undefined ? 1 : boss.squashY);
+        const br = boss.r * (0.5 * (1 + squashY));
+        const d = deps.dist(o.x, o.y, boss.x, boss.y);
+        if (d <= (o.r + br)) {
+          if (onBossHit) onBossHit(o.x, o.y, o.r);
+          reds.splice(i, 1);
+          continue;
+        }
       }
 
       const minX = o.r;

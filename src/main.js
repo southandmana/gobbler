@@ -22,7 +22,7 @@ const BOSS_PALETTE = {
   outline: '#b04444',
   wing: '#c44b4b',
 };
-const boss = { x: 0, y: 0, r: 0, wingT: 0, mouth: 0 };
+const boss = { x: 0, y: 0, r: 0, wingT: 0, mouth: 0, vy: 0, squashY: 1, duckT: 0, reactT: 0, actionCd: 0, intent: null, hp: 8, hpMax: 8 };
 
 const DIALOGUE = [
   { speaker: 'RED', text: 'You really thought you could just glide past me?' },
@@ -524,6 +524,16 @@ const advanceDialogue = () => {
   scoreFade.active = true;
   scoreFade.t = 0;
   showHealthBar = true;
+  boss.hp = boss.hpMax;
+  boss.vy = 0;
+  boss.duckT = 0;
+  boss.reactT = 0;
+  boss.actionCd = 0;
+  boss.intent = null;
+  boss.squashY = 1;
+  npcT = 0.05;
+  redT = 0.08;
+  blueT = 0.1;
 };
 
 const canSpawnNow = () => {
@@ -705,6 +715,34 @@ const spawnBlue = () => {
 
   blues.push(makeBlue(x, y, r));
   markSpawn();
+};
+
+const pickBossThreat = (boss, reds, scrollSpeed) => {
+  let bestT = Infinity;
+  let bestY = null;
+  const g = 900;
+  for (const o of reds) {
+    if (o.state !== 'deflect') continue;
+    const vx = o.vx - scrollSpeed;
+    if (vx <= 60) continue;
+    const dx = boss.x - o.x;
+    if (dx <= 0) continue;
+    const t = dx / vx;
+    if (t < 0.05 || t > 1.1) continue;
+    const y = o.y + o.vy * t + 0.5 * g * t * t;
+    const bossTop = boss.y - boss.r * boss.squashY;
+    const bossBottom = boss.y + boss.r * boss.squashY;
+    const pad = o.r + boss.r * 0.25;
+    if (y >= bossTop - pad && y <= bossBottom + pad) {
+      if (t < bestT) {
+        bestT = t;
+        bestY = y;
+      }
+    }
+  }
+  if (bestY === null) return null;
+  const mid = boss.y - boss.r * 0.45;
+  return (bestY > mid) ? 'jump' : 'duck';
 };
 
 const getScreenAlpha = () => {
@@ -896,6 +934,9 @@ const tick = (now) => {
     setScoreOpacity(1);
   }
 
+  const bossPhase = (gameState.value === 'cutscene' && showHealthBar);
+  const activePlay = (gameState.value === 'playing' || bossPhase);
+
   if (gameState.value === 'playing' || gameState.value === 'cutscene') {
     const maxScroll = (gameState.value === 'cutscene') ? Infinity : finishStopX;
     const move = Math.max(0, Math.min(WORLD.speed * dt, maxScroll - scrollX));
@@ -906,7 +947,7 @@ const tick = (now) => {
       if (heldMs > SQUASH.tapMs) didDuckThisHold = true;
     }
 
-    if (!finishExit && !cutscenePending && gameState.value === 'playing') updateTrail(dt);
+    if (!finishExit && !cutscenePending && activePlay) updateTrail(dt);
     updateCheckpointProgress();
 
     if (gameState.value === 'playing' && !finishExit && scrollX >= finishStopX - 1) {
@@ -921,7 +962,7 @@ const tick = (now) => {
       finishFadeEntities.t = 0;
     }
 
-    if (!finishExit && !cutscenePending && gameState.value === 'playing') npcT -= dt;
+    if (!finishExit && !cutscenePending && activePlay) npcT -= dt;
     if (npcT <= 0) {
       if (canSpawnNow()) {
         if (!maybeStartTrail()) spawnNPC();
@@ -931,13 +972,13 @@ const tick = (now) => {
       }
     }
 
-    if (!finishExit && !cutscenePending && gameState.value === 'playing') redT -= dt;
+    if (!finishExit && !cutscenePending && activePlay) redT -= dt;
     if (redT <= 0) {
       if (canSpawnNow()) { spawnRed(); redT = nextInterval('red'); }
       else redT = 0.08;
     }
 
-    if (!finishExit && !cutscenePending && gameState.value === 'playing') blueT -= dt;
+    if (!finishExit && !cutscenePending && activePlay) blueT -= dt;
     if (blueT <= 0) {
       if (canSpawnNow()) { spawnBlue(); blueT = nextInterval('blue'); }
       else blueT = 0.10;
@@ -990,7 +1031,7 @@ const tick = (now) => {
       }
     }
 
-    if (!finishExit && !cutscenePending && gameState.value === 'playing') updateNPCs(npcs, player, dt, move, {
+    if (!finishExit && !cutscenePending && activePlay) updateNPCs(npcs, player, dt, move, {
       groundY,
       EAT,
       GROW,
@@ -1014,7 +1055,7 @@ const tick = (now) => {
       },
     });
 
-    if (!finishExit && !cutscenePending && gameState.value === 'playing') updateReds(reds, player, dt, move, {
+    if (!finishExit && !cutscenePending && activePlay) updateReds(reds, player, dt, move, {
       EAT,
       HAZARD,
       MOUTH,
@@ -1035,6 +1076,14 @@ const tick = (now) => {
       showScore,
       groundY,
       npcs,
+      boss,
+      bossActive: bossPhase,
+      onBossHit: (x, y, r) => {
+        if (!bossPhase) return;
+        boss.hp = Math.max(0, boss.hp - 1);
+        if (playEatBombSfx) playEatBombSfx();
+        startLineBurstAt(x, y, Math.max(0.7, r / 18));
+      },
       attackActive: () => attackFlashT > 0,
       onBite: (x, y) => {
         biteDir = Math.atan2(y - player.y, x - player.x);
@@ -1043,7 +1092,7 @@ const tick = (now) => {
       },
     });
 
-    if (!finishExit && !cutscenePending && gameState.value === 'playing') updateBlues(blues, player, dt, move, {
+    if (!finishExit && !cutscenePending && activePlay) updateBlues(blues, player, dt, move, {
       EAT,
       MOUTH,
       triggerChomp,
@@ -1065,12 +1114,57 @@ const tick = (now) => {
     updateMouth(player.mouth, dt, MOUTH, clamp);
 
     if (gameState.value === 'cutscene') {
-      const groundedY = groundY() - player.r;
       boss.r = player.r;
-      boss.y = groundedY;
       boss.x = innerWidth - Math.max(60, boss.r * 1.2);
-      const wingSpeed = 4.6;
-      boss.wingT = (boss.wingT + dt * wingSpeed) % 1;
+
+      if (bossPhase) {
+        const scrollSpeed = dt > 0 ? (move / dt) : 0;
+        boss.actionCd = Math.max(0, boss.actionCd - dt);
+        boss.reactT = Math.max(0, boss.reactT - dt);
+
+        if (!boss.intent && boss.actionCd <= 0) {
+          boss.intent = pickBossThreat(boss, reds, scrollSpeed);
+          if (boss.intent) boss.reactT = rand(0.06, 0.14);
+        }
+
+        if (boss.intent && boss.reactT <= 0) {
+          if (boss.intent === 'jump') {
+            const floor = groundY() - boss.r * boss.squashY;
+            const grounded = (Math.abs(boss.y - floor) < 0.5) && Math.abs(boss.vy) < 60;
+            if (grounded) boss.vy = PHYS.flapVy * 0.9;
+          } else if (boss.intent === 'duck') {
+            boss.duckT = 0.36;
+          }
+          boss.intent = null;
+          boss.actionCd = rand(0.18, 0.32);
+        }
+
+        if (boss.duckT > 0) boss.duckT = Math.max(0, boss.duckT - dt);
+        const duckTarget = (boss.duckT > 0) ? 0.65 : 1;
+        boss.squashY = lerp(boss.squashY, duckTarget, 1 - Math.pow(0.001, dt));
+
+        boss.vy += PHYS.gravity * dt;
+        boss.vy = clamp(boss.vy, -2000, PHYS.maxFall);
+        boss.y += boss.vy * dt;
+
+        const floor = groundY() - boss.r * boss.squashY;
+        if (boss.y > floor) {
+          boss.y = floor;
+          boss.vy = boss.vy * -0.18;
+          if (Math.abs(boss.vy) < 60) boss.vy = 0;
+        }
+
+        const grounded = (Math.abs(boss.y - floor) < 0.5) && Math.abs(boss.vy) < 1;
+        const wingSpeed = grounded ? 4.6 : 6.2;
+        boss.wingT = (boss.wingT + dt * wingSpeed) % 1;
+      } else {
+        boss.vy = 0;
+        boss.duckT = 0;
+        boss.squashY = lerp(boss.squashY, 1, 1 - Math.pow(0.001, dt));
+        boss.y = groundY() - boss.r * boss.squashY;
+        const wingSpeed = 4.6;
+        boss.wingT = (boss.wingT + dt * wingSpeed) % 1;
+      }
     }
 
     if (finishExit) {
@@ -1185,7 +1279,7 @@ const draw = () => {
       drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
     }
     if (gameState.value === 'cutscene') {
-      drawPlayer2(ctx, boss.x, boss.y, boss.r, 0, boss.mouth, 1, BOSS_PALETTE, false, true, { t: boss.wingT });
+      drawPlayer2(ctx, boss.x, boss.y, boss.r, 0, boss.mouth, boss.squashY, BOSS_PALETTE, false, true, { t: boss.wingT });
     }
 
     drawFloaters(ctx, floaters, clamp);
@@ -1392,7 +1486,7 @@ const drawHealthBar = (ctx) => {
   const x = (innerWidth - w) * 0.5;
   const y = 14;
   const pad = 2;
-  const segments = 10;
+  const segments = Math.max(1, boss.hpMax || 10);
   const gap = 3;
   const segW = (w - pad * 2 - gap * (segments - 1)) / segments;
 
@@ -1403,9 +1497,10 @@ const drawHealthBar = (ctx) => {
   ctx.lineWidth = 2;
   ctx.strokeRect(x, y, w, h);
 
-  ctx.fillStyle = '#f2f4f7';
   for (let i = 0; i < segments; i++) {
     const sx = x + pad + i * (segW + gap);
+    const on = i < boss.hp;
+    ctx.fillStyle = on ? '#f2f4f7' : 'rgba(242,244,247,0.25)';
     ctx.fillRect(sx, y + pad, segW, h - pad * 2);
   }
 
