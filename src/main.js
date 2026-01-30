@@ -629,7 +629,7 @@ const tick = (now) => {
     }
   }
 
-  if (gameState.value === 'playing' || gameState.value === 'start' || gameState.value === 'startTransition') {
+  if (gameState.value === 'playing') {
     scrollX += WORLD.speed * dt;
     if (inputHeld) {
       const heldMs = performance.now() - inputHeldAt;
@@ -703,7 +703,6 @@ const tick = (now) => {
       easeInOut,
       lerpAngle,
       dist,
-      startHeadShatter: startNpcShatterAt,
       onBite: (x, y) => {
         biteDir = Math.atan2(y - player.y, x - player.x);
         biteT = 0.12;
@@ -769,7 +768,6 @@ const tick = (now) => {
       if (player._beingEaten.t >= 1) {
         player.alive = false;
         playNpcEatsPlayerSfx();
-        startHeadShatterAt(player._beingEaten.tx, player._beingEaten.ty, player._beingEaten.r0);
         gameState.value = 'dying';
         showScore(false);
         player._beingEaten = null;
@@ -790,6 +788,8 @@ const tick = (now) => {
     } else {
       player.mouth.dir = lerpAngle(player.mouth.dir, targetAngle, 1 - Math.pow(0.001, dt));
     }
+  } else if (gameState.value === 'start' || gameState.value === 'startTransition') {
+    scrollX += WORLD.speed * dt;
   } else if (gameState.value !== 'dying' && gameState.value !== 'gameover') {
     const move = WORLD.speed * dt;
     driftNPCs(npcs, move);
