@@ -36,6 +36,10 @@ let dialogueChar = 0;
 const dialogueSpeed = 38;
 const scoreFade = { active: false, t: 0, dur: 0.6 };
 let showHealthBar = false;
+let bossCheckpointScore = 0;
+let bossCheckpointSize = 0;
+let bossCheckpointX = 0;
+let diedInBoss = false;
 
 const createSfxPool = (src, count = 4, volume = 0.6) => {
   const pool = Array.from({ length: count }, () => {
@@ -335,6 +339,10 @@ const resetGameVars = () => {
   checkpointSizes.length = 0;
   checkpointScores[0] = score;
   checkpointSizes[0] = player.baseR;
+  bossCheckpointScore = score;
+  bossCheckpointSize = player.baseR;
+  bossCheckpointX = 0;
+  diedInBoss = false;
   finishExit = false;
   finishFadeEntities.active = false;
   finishFadeEntities.t = 0;
@@ -371,6 +379,10 @@ const beginStartScreen = () => {
   scoreFade.active = false;
   scoreFade.t = 0;
   boss.wingT = 0;
+  bossCheckpointScore = score;
+  bossCheckpointSize = player.baseR;
+  bossCheckpointX = 0;
+  diedInBoss = false;
   setScoreOpacity(1);
   cutscenePending = false;
   cutsceneFade.active = false;
@@ -396,6 +408,98 @@ const beginGameOver = () => {
 };
 
 const respawnAtCheckpoint = () => {
+  if (diedInBoss) {
+    diedInBoss = false;
+    const cpScore = (bossCheckpointScore != null) ? bossCheckpointScore : score;
+    const cpSize = bossCheckpointSize || player.baseR;
+    const cpX = bossCheckpointX || (finishStopX + innerWidth + 40);
+
+    scrollX = cpX;
+    setScore(cpScore);
+
+    npcs.length = 0;
+    reds.length = 0;
+    blues.length = 0;
+    npcT = 0;
+    redT = 0;
+    blueT = 0;
+    spawnsSinceEdible = 0;
+    encounterQueue.length = 0;
+    forceEdibleNext = false;
+    trail = null;
+    floaters.length = 0;
+
+    player.alive = true;
+    player.r = cpSize;
+    player.vy = 0;
+    player.y = groundY() - player.r;
+    player.x = 160;
+    player.emotion = 'neutral';
+    player._beingEaten = null;
+    player.squashY = 1;
+    player.squashTarget = 1;
+    player.mouth.open = 0;
+    player.mouth.dir = 0;
+    player.mouth.pulseT = 1;
+    player.mouth.pulseDur = MOUTH.pulseDur;
+    player.mouth.cooldown = 0;
+    player.wingT = 0;
+
+    boss.vy = 0;
+    boss.duckT = 0;
+    boss.squashY = 1;
+    boss.intent = null;
+    boss.reactT = 0;
+    boss.actionCd = 0;
+    boss.wingT = 0;
+
+    burst.active = false;
+    burst.t = 0;
+    burst.particles.length = 0;
+    headShatter.active = false;
+    headShatter.pieces.length = 0;
+    npcShatter.active = false;
+    npcShatter.pieces.length = 0;
+    lineBurst.active = false;
+    lineBurst.t = 0;
+    lineBurst.puffs.length = 0;
+    sparkles.particles.length = 0;
+    dustPuffs.puffs.length = 0;
+    dustTrailAcc = 0;
+    dustTrailGap = 22;
+    wasGrounded = false;
+
+    WORLD.speed = WORLD.baseSpeed;
+    lastSpawnWorldX = -1e9;
+    waveT = 0;
+    reliefActive = false;
+    stress = 0;
+    stressEase = 0;
+    resetHudTrack();
+    missLog = [];
+    missCount = 0;
+    missPoints = 0;
+
+    finishExit = false;
+    finishFadeEntities.active = false;
+    finishFadeEntities.t = 0;
+    cinematicUiHidden = true;
+    dialogueIndex = 0;
+    dialogueChar = 0;
+    showHealthBar = false;
+    scoreFade.active = false;
+    scoreFade.t = 0;
+    cutscenePending = false;
+    cutsceneFade.active = true;
+    cutsceneFade.phase = 'in';
+    cutsceneFade.t = 0;
+    setScoreOpacity(0);
+    showScore(true);
+    gameState.value = 'cutscene';
+    updateDifficulty();
+    return;
+  }
+
   const cpX = checkpointXs[checkpointIndex] || 0;
   const cpScore = (checkpointScores[checkpointIndex] != null) ? checkpointScores[checkpointIndex] : score;
   const cpSize = player.baseR;
@@ -1180,7 +1284,10 @@ const tick = (now) => {
         cutsceneFade.t = 0;
         inputHeld = false;
         player.squashTarget = 1;
-        scrollX = finishStopX + innerWidth + 40;
+        bossCheckpointScore = score;
+        bossCheckpointSize = player.baseR;
+        bossCheckpointX = finishStopX + innerWidth + 40;
+        scrollX = bossCheckpointX;
         player.x = 160;
       }
     } else {
@@ -1226,6 +1333,7 @@ const tick = (now) => {
   }
 
   if (gameState.value === 'dying') {
+    if (bossPhase) diedInBoss = true;
     if (!burst.active) respawnAtCheckpoint();
   }
 
