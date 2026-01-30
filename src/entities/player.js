@@ -23,9 +23,10 @@ export const createPlayer = (baseR) => ({
   _beingEaten: null,
   squashY: 1,
   squashTarget: 1,
+  wingT: 0,
 });
 
-export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette = DEFAULT_PALETTE, flipX = false, rotate = true) => {
+export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette = DEFAULT_PALETTE, flipX = false, rotate = true, wing = null) => {
   if (!(r > 0.01)) return;
   const o = clamp(open01, 0, 1);
   const { body, bodyAccent, lips, eye, outline } = palette;
@@ -56,18 +57,26 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
     pctx.stroke();
   }
 
-  // Wing-like mark on the head (soft bean shape).
-  const wingW = r * 0.95;
-  const wingH = r * 0.6;
-  const tx = -r * 0.75;
-  const ty = r * 0.38;
-  pctx.save();
-  pctx.translate(tx, ty);
-  pctx.rotate(-1.05);
-  pctx.fillStyle = '#eac866';
-  drawWing(pctx, 0, 0, wingW, wingH);
-  pctx.fill();
-  pctx.restore();
+  if (wing) {
+    // Wing-like mark on the head (procedural 2-frame flipbook).
+    const wingW = r * 0.95;
+    const wingH = r * 0.6;
+    const tx = -r * 0.75;
+    const frames = [
+      { rot: -1.05, ty: 0.38 },
+      { rot: -0.2, ty: 0.14 },
+    ];
+    const t = (wing.t || 0) % 1;
+    const idx = Math.floor(t * frames.length) % frames.length;
+    const f = frames[idx];
+    pctx.save();
+    pctx.translate(tx, r * f.ty);
+    pctx.rotate(f.rot);
+    pctx.fillStyle = '#eac866';
+    drawWing(pctx, 0, 0, wingW, wingH);
+    pctx.fill();
+    pctx.restore();
+  }
 
 
   // Mouth geometry (simple bars)

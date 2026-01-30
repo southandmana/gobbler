@@ -137,5 +137,5 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
 
 export const drawCharacter = (ctx, x, y, r, dirRad, open01, emotion, squashY = 1) => {
   const { angle, flipX } = resolveFacing(dirRad);
-  drawPlayer2(ctx, x, y, r, angle, open01, squashY, NPC_PALETTE, flipX, true);
+  drawPlayer2(ctx, x, y, r, angle, open01, squashY, NPC_PALETTE, flipX, true, null);
 };

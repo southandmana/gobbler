@@ -264,6 +264,7 @@ const resetGameVars = () => {
   player.mouth.pulseT = 1;
   player.mouth.pulseDur = MOUTH.pulseDur;
   player.mouth.cooldown = 0;
+  player.wingT = 0;
 
   burst.active = false;
   burst.t = 0;
@@ -694,6 +695,8 @@ const tick = (now) => {
       }
 
       const grounded = (Math.abs(player.y - floor) < 0.5) && Math.abs(player.vy) < 1;
+      const wingSpeed = grounded ? 4.6 : 6.2;
+      player.wingT = (player.wingT + dt * wingSpeed) % 1;
       if (grounded && !wasGrounded) {
         const px = player.x + player.r * 0.15;
         const py = groundY() + 8;
@@ -874,7 +877,7 @@ const draw = () => {
     }
 
     if (gameState.value === 'playing' && player.r > 0.3) {
-      drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY);
+      drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
     }
 
     drawFloaters(ctx, floaters, clamp);
