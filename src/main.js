@@ -12,7 +12,7 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 
-const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition
+const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition | cutscene
 
 const createSfxPool = (src, count = 4, volume = 0.6) => {
   const pool = Array.from({ length: count }, () => {
@@ -204,6 +204,16 @@ const starsFar = makeStars(70, rand);
 let scrollX = 0;
 
 const screenAnim = { active: false, t: 0, dur: 0.45 };
+const cutsceneFade = { active: false, phase: 'out', t: 0, dur: 0.7 };
+
+const LEVEL = { length: 20000, checkpoints: [0, 0.25, 0.5, 0.75, 1] };
+const checkpointXs = LEVEL.checkpoints.map((f) => f * LEVEL.length);
+let checkpointIndex = 0;
+const checkpointScores = [];
+const checkpointSizes = [];
+const finishStopX = Math.max(0, LEVEL.length - innerWidth + 120);
+let finishExit = false;
+let cutscenePending = false;
 
 const startBurstAt = (x, y, dur = 0.55) => startBurst(burst, x, y, rand, dur);
 const startLineBurstAt = (x, y, scale = 1, dur = 0.16) => startLineBurst(lineBurst, x, y, rand, scale, dur);
@@ -239,6 +249,7 @@ const resetGameVars = () => {
   npcT = 0;
   redT = 0;
   blueT = 0;
+  scrollX = 0;
   setScore(0);
   spawnsSinceEdible = 0;
   encounterQueue.length = 0;
@@ -292,6 +303,17 @@ const resetGameVars = () => {
   missLog = [];
   missCount = 0;
   missPoints = 0;
+
+  checkpointIndex = 0;
+  checkpointScores.length = 0;
+  checkpointSizes.length = 0;
+  checkpointScores[0] = score;
+  checkpointSizes[0] = player.baseR;
+  finishExit = false;
+  cutscenePending = false;
+  cutsceneFade.active = false;
+  cutsceneFade.t = 0;
+  cutsceneFade.phase = 'out';
 };
 
 const beginStartScreen = () => {
@@ -303,6 +325,11 @@ const beginStartScreen = () => {
   dustPuffs.puffs.length = 0;
   dustTrailAcc = 0;
   wasGrounded = false;
+  finishExit = false;
+  cutscenePending = false;
+  cutsceneFade.active = false;
+  cutsceneFade.t = 0;
+  cutsceneFade.phase = 'out';
 };
 
 const beginGame = () => {
@@ -322,6 +349,76 @@ const beginGameOver = () => {
   screenAnim.dur = 0.45;
 };
 
+const respawnAtCheckpoint = () => {
+  const cpX = checkpointXs[checkpointIndex] || 0;
+  const cpScore = (checkpointScores[checkpointIndex] != null) ? checkpointScores[checkpointIndex] : score;
+  const cpSize = player.baseR;
+
+  scrollX = cpX;
+  setScore(cpScore);
+
+  npcs.length = 0;
+  reds.length = 0;
+  blues.length = 0;
+  npcT = 0;
+  redT = 0;
+  blueT = 0;
+  spawnsSinceEdible = 0;
+  encounterQueue.length = 0;
+  forceEdibleNext = false;
+  trail = null;
+  floaters.length = 0;
+
+  player.alive = true;
+  player.r = cpSize;
+  player.vy = 0;
+  player.y = groundY() - player.r;
+  player.x = 160;
+  player.emotion = 'neutral';
+  player._beingEaten = null;
+  player.squashY = 1;
+  player.squashTarget = 1;
+  player.mouth.open = 0;
+  player.mouth.dir = 0;
+  player.mouth.pulseT = 1;
+  player.mouth.pulseDur = MOUTH.pulseDur;
+  player.mouth.cooldown = 0;
+  player.wingT = 0;
+
+  burst.active = false;
+  burst.t = 0;
+  burst.particles.length = 0;
+  headShatter.active = false;
+  headShatter.pieces.length = 0;
+  npcShatter.active = false;
+  npcShatter.pieces.length = 0;
+  lineBurst.active = false;
+  lineBurst.t = 0;
+  lineBurst.puffs.length = 0;
+  sparkles.particles.length = 0;
+  dustPuffs.puffs.length = 0;
+  dustTrailAcc = 0;
+  dustTrailGap = 22;
+  wasGrounded = false;
+
+  WORLD.speed = WORLD.baseSpeed;
+  lastSpawnWorldX = -1e9;
+  waveT = 0;
+  reliefActive = false;
+  stress = 0;
+  stressEase = 0;
+  resetHudTrack();
+  missLog = [];
+  missCount = 0;
+  missPoints = 0;
+
+  showScore(true);
+  gameState.value = 'playing';
+  updateDifficulty();
+  startBurstAt(player.x, player.y, 0.45);
+  playPlayerSpawnsSfx();
+};
+
 const startStartTransition = () => {
   playStartFromHomeSfx();
   screenAnim.active = true;
@@ -332,6 +429,34 @@ const startStartTransition = () => {
 
 const startRestartTransition = () => {
   beginGame();
+};
+
+const updateCheckpointProgress = () => {
+  const nextIdx = checkpointIndex + 1;
+  if (nextIdx >= checkpointXs.length) return;
+  if (scrollX >= checkpointXs[nextIdx]) {
+    checkpointIndex = nextIdx;
+    checkpointScores[checkpointIndex] = score;
+    checkpointSizes[checkpointIndex] = player.baseR;
+  }
+};
+
+const syncCheckpointToScroll = () => {
+  let idx = 0;
+  for (let i = 1; i < checkpointXs.length; i++) {
+    if (gameState.value === 'cutscene' && i === checkpointXs.length - 1) continue;
+    if (scrollX >= checkpointXs[i]) idx = i;
+    else break;
+  }
+  checkpointIndex = idx;
+  if (checkpointScores[idx] == null) checkpointScores[idx] = score;
+  if (checkpointSizes[idx] == null) checkpointSizes[idx] = player.baseR;
+};
+
+const warpNearFinish = () => {
+  scrollX = Math.max(0, LEVEL.length - innerWidth - 40);
+  syncCheckpointToScroll();
+  finishExit = false;
 };
 
 const canSpawnNow = () => {
@@ -571,11 +696,15 @@ addEventListener('keydown', (e) => {
   if (e.key === 'r' || e.key === 'R') {
     resetGameVars(); beginStartScreen(); return;
   }
+  if (gameState.value === 'cutscene' || cutscenePending) return;
   if (e.code === 'Space') {
     e.preventDefault();
     if (gameState.value === 'start') startStartTransition();
     else if (gameState.value === 'gameover') startRestartTransition();
     else inputPress();
+  }
+  if (e.code === 'Enter') {
+    if (gameState.value === 'playing') warpNearFinish();
   }
 }, { passive: false });
 
@@ -595,7 +724,7 @@ addEventListener('pointerdown', (ev) => {
   toCanvasXY(ev);
   if (gameState.value === 'start') { startStartTransition(); return; }
   if (gameState.value === 'gameover') { startRestartTransition(); return; }
-  if (gameState.value === 'startTransition' || gameState.value === 'restartTransition' || gameState.value === 'dying') return;
+  if (gameState.value === 'startTransition' || gameState.value === 'restartTransition' || gameState.value === 'dying' || gameState.value === 'cutscene' || cutscenePending) return;
   inputPress();
 });
 
@@ -646,8 +775,27 @@ const tick = (now) => {
     }
   }
 
-  if (gameState.value === 'playing') {
-    const move = WORLD.speed * dt;
+  if (cutsceneFade.active) {
+    cutsceneFade.t = clamp(cutsceneFade.t + dt / cutsceneFade.dur, 0, 1);
+    if (cutsceneFade.t >= 1) {
+      if (cutsceneFade.phase === 'out') {
+        if (cutscenePending) {
+          gameState.value = 'cutscene';
+          cutscenePending = false;
+          scrollX = finishStopX + innerWidth + 40;
+          player.x = 160;
+        }
+        cutsceneFade.phase = 'in';
+        cutsceneFade.t = 0;
+      } else {
+        cutsceneFade.active = false;
+      }
+    }
+  }
+
+  if (gameState.value === 'playing' || gameState.value === 'cutscene') {
+    const maxScroll = (gameState.value === 'cutscene') ? Infinity : finishStopX;
+    const move = Math.max(0, Math.min(WORLD.speed * dt, maxScroll - scrollX));
     scrollX += move;
     if (inputHeld) {
       const heldMs = performance.now() - inputHeldAt;
@@ -655,9 +803,21 @@ const tick = (now) => {
       if (heldMs > SQUASH.tapMs) didDuckThisHold = true;
     }
 
-    updateTrail(dt);
+    if (!finishExit && !cutscenePending && gameState.value === 'playing') updateTrail(dt);
+    updateCheckpointProgress();
 
-    npcT -= dt;
+    if (gameState.value === 'playing' && !finishExit && scrollX >= finishStopX - 1) {
+      finishExit = true;
+      npcT = 999;
+      redT = 999;
+      blueT = 999;
+      npcs.length = 0;
+      reds.length = 0;
+      blues.length = 0;
+      trail = null;
+    }
+
+    if (!finishExit && !cutscenePending && gameState.value === 'playing') npcT -= dt;
     if (npcT <= 0) {
       if (canSpawnNow()) {
         if (!maybeStartTrail()) spawnNPC();
@@ -667,13 +827,13 @@ const tick = (now) => {
       }
     }
 
-    redT -= dt;
+    if (!finishExit && !cutscenePending && gameState.value === 'playing') redT -= dt;
     if (redT <= 0) {
       if (canSpawnNow()) { spawnRed(); redT = nextInterval('red'); }
       else redT = 0.08;
     }
 
-    blueT -= dt;
+    if (!finishExit && !cutscenePending && gameState.value === 'playing') blueT -= dt;
     if (blueT <= 0) {
       if (canSpawnNow()) { spawnBlue(); blueT = nextInterval('blue'); }
       else blueT = 0.10;
@@ -726,7 +886,7 @@ const tick = (now) => {
       }
     }
 
-    updateNPCs(npcs, player, dt, move, {
+    if (!finishExit && !cutscenePending && gameState.value === 'playing') updateNPCs(npcs, player, dt, move, {
       groundY,
       EAT,
       GROW,
@@ -750,7 +910,7 @@ const tick = (now) => {
       },
     });
 
-    updateReds(reds, player, dt, move, {
+    if (!finishExit && !cutscenePending && gameState.value === 'playing') updateReds(reds, player, dt, move, {
       EAT,
       HAZARD,
       MOUTH,
@@ -779,7 +939,7 @@ const tick = (now) => {
       },
     });
 
-    updateBlues(blues, player, dt, move, {
+    if (!finishExit && !cutscenePending && gameState.value === 'playing') updateBlues(blues, player, dt, move, {
       EAT,
       MOUTH,
       triggerChomp,
@@ -799,6 +959,24 @@ const tick = (now) => {
     });
 
     updateMouth(player.mouth, dt, MOUTH, clamp);
+
+    if (finishExit) {
+      player.x += WORLD.speed * dt;
+      if (player.x > innerWidth + player.r + 20 && gameState.value === 'playing') {
+        finishExit = false;
+        cutscenePending = false;
+        gameState.value = 'cutscene';
+        cutsceneFade.active = true;
+        cutsceneFade.phase = 'in';
+        cutsceneFade.t = 0;
+        inputHeld = false;
+        player.squashTarget = 1;
+        scrollX = finishStopX + innerWidth + 40;
+        player.x = 160;
+      }
+    } else {
+      if (!cutscenePending) player.x = 160;
+    }
 
     if (player._beingEaten) {
       player._beingEaten.t = clamp(player._beingEaten.t + dt / EAT.swallowDur, 0, 1);
@@ -839,7 +1017,7 @@ const tick = (now) => {
   }
 
   if (gameState.value === 'dying') {
-    if (!burst.active) beginGameOver();
+    if (!burst.active) respawnAtCheckpoint();
   }
 
   draw();
@@ -861,6 +1039,8 @@ const draw = () => {
 
   const showEntities = !(gameState.value === 'start' || gameState.value === 'startTransition');
   if (showEntities) {
+    drawCheckpointFlags(ctx, w);
+
     for (const o of reds) {
       drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
     }
@@ -876,7 +1056,7 @@ const draw = () => {
       drawCharacter(ctx, n.x, n.y, n.r, n.mouth.dir, n.mouth.open, n.emotion, 1, clamp, lerp);
     }
 
-    if (gameState.value === 'playing' && player.r > 0.3) {
+    if ((gameState.value === 'playing' || gameState.value === 'cutscene') && player.r > 0.3) {
       drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
     }
 
@@ -887,6 +1067,10 @@ const draw = () => {
     if (npcShatter.active) drawShatter(ctx, npcShatter);
     drawSparkles(ctx, sparkles);
     if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
+  }
+
+  if (gameState.value === 'playing' || gameState.value === 'dying') {
+    drawProgressBar(ctx, w);
   }
 
   if (debugHUD) {
@@ -980,6 +1164,109 @@ const draw = () => {
   } else if (gameState.value === 'paused') {
     drawScreenText(ctx, w, h, 'PAUSE', 'PRESS P TO RESUME', '', 1);
   }
+
+  if (cutsceneFade.active) {
+    const tt = easeInOut(cutsceneFade.t);
+    const a = (cutsceneFade.phase === 'out') ? tt : (1 - tt);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+};
+
+const drawCheckpointFlags = (ctx, w) => {
+  const gy = groundY();
+  const poleH = 42;
+  const poleW = 4;
+  const flagW = 18;
+  const flagH = 12;
+
+  ctx.save();
+  for (let i = 1; i < checkpointXs.length; i++) {
+    const worldX = checkpointXs[i];
+    const x = worldX - scrollX;
+    if (x < -40 || x > w + 40) continue;
+
+    const baseY = gy;
+    ctx.strokeStyle = '#7a4b4b';
+    ctx.lineWidth = poleW;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x, baseY);
+    ctx.lineTo(x, baseY - poleH);
+    ctx.stroke();
+
+    if (i === checkpointXs.length - 1) {
+      const square = 6;
+      const cols = 2;
+      const rows = 2;
+      const startX = x + 2;
+      const startY = baseY - poleH;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const on = (r + c) % 2 === 0;
+          ctx.fillStyle = on ? '#f2f4f7' : '#262626';
+          ctx.fillRect(startX + c * square, startY + r * square, square, square);
+        }
+      }
+    } else {
+      ctx.fillStyle = '#e44c4c';
+      ctx.beginPath();
+      ctx.moveTo(x, baseY - poleH);
+      ctx.lineTo(x + flagW, baseY - poleH + flagH * 0.4);
+      ctx.lineTo(x, baseY - poleH + flagH);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+};
+
+const drawProgressBar = (ctx, w) => {
+  const barW = Math.min(460, w * 0.7);
+  const barH = 6;
+  const x = (w - barW) * 0.5;
+  const y = 18;
+  const progress = clamp(scrollX / LEVEL.length, 0, 1);
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineWidth = barH;
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + barW, y);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#f2f4f7';
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + barW * progress, y);
+  ctx.stroke();
+
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+  for (let i = 1; i <= 3; i++) {
+    const lx = x + barW * (i / 4);
+    ctx.beginPath();
+    ctx.moveTo(lx, y - 8);
+    ctx.lineTo(lx, y + 8);
+    ctx.stroke();
+  }
+
+  const cx = x + barW * progress;
+  ctx.fillStyle = '#f2f4f7';
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, y, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.restore();
 };
 
 requestAnimationFrame(tick);
