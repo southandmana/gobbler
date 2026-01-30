@@ -22,6 +22,20 @@ const BOSS_PALETTE = {
   outline: '#b04444',
   wing: '#c44b4b',
 };
+const boss = { x: 0, y: 0, r: 0, wingT: 0, mouth: 0 };
+
+const DIALOGUE = [
+  { speaker: 'RED', text: 'You really thought you could just glide past me?' },
+  { speaker: 'FURY', text: 'Move, brother. I am done playing nice.' },
+  { speaker: 'RED', text: 'Always the golden child. Still hiding behind speed?' },
+  { speaker: 'FURY', text: 'Still hiding behind a big mouth?' },
+  { speaker: 'RED', text: 'Then prove it. Step up.' },
+];
+let dialogueIndex = 0;
+let dialogueChar = 0;
+const dialogueSpeed = 38;
+const scoreFade = { active: false, t: 0, dur: 0.6 };
+let showHealthBar = false;
 
 const createSfxPool = (src, count = 4, volume = 0.6) => {
   const pool = Array.from({ length: count }, () => {
@@ -325,6 +339,12 @@ const resetGameVars = () => {
   finishFadeEntities.active = false;
   finishFadeEntities.t = 0;
   cinematicUiHidden = false;
+  dialogueIndex = 0;
+  dialogueChar = 0;
+  showHealthBar = false;
+  scoreFade.active = false;
+  scoreFade.t = 0;
+  boss.wingT = 0;
   setScoreOpacity(1);
   cutscenePending = false;
   cutsceneFade.active = false;
@@ -345,6 +365,12 @@ const beginStartScreen = () => {
   finishFadeEntities.active = false;
   finishFadeEntities.t = 0;
   cinematicUiHidden = false;
+  dialogueIndex = 0;
+  dialogueChar = 0;
+  showHealthBar = false;
+  scoreFade.active = false;
+  scoreFade.t = 0;
+  boss.wingT = 0;
   setScoreOpacity(1);
   cutscenePending = false;
   cutsceneFade.active = false;
@@ -477,6 +503,27 @@ const warpNearFinish = () => {
   scrollX = Math.max(0, LEVEL.length - innerWidth - 40);
   syncCheckpointToScroll();
   finishExit = false;
+};
+
+const advanceDialogue = () => {
+  if (dialogueIndex >= DIALOGUE.length) return;
+  const entry = DIALOGUE[dialogueIndex];
+  if (!entry) return;
+  if (dialogueChar < entry.text.length) {
+    dialogueChar = entry.text.length;
+    return;
+  }
+  if (dialogueIndex < DIALOGUE.length - 1) {
+    dialogueIndex += 1;
+    dialogueChar = 0;
+    return;
+  }
+  dialogueIndex = DIALOGUE.length;
+  dialogueChar = 0;
+  cinematicUiHidden = false;
+  scoreFade.active = true;
+  scoreFade.t = 0;
+  showHealthBar = true;
 };
 
 const canSpawnNow = () => {
@@ -669,7 +716,8 @@ const getScreenAlpha = () => {
 };
 
 const flap = () => {
-  if (gameState.value !== 'playing' || !player.alive || player._beingEaten) return;
+  const canControl = (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) && !finishExit;
+  if (!canControl || !player.alive || player._beingEaten) return;
   player.vy = PHYS.flapVy;
 };
 
@@ -679,7 +727,8 @@ let didDuckThisHold = false;
 let attackFlashT = 0;
 
 const inputPress = () => {
-  if (gameState.value !== 'playing' || finishExit || !player.alive || player._beingEaten) return;
+  const canControl = (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) && !finishExit;
+  if (!canControl || !player.alive || player._beingEaten) return;
   if (inputHeld) return;
   inputHeld = true;
   inputHeldAt = performance.now();
@@ -695,7 +744,7 @@ const inputRelease = () => {
   inputHeld = false;
   player.squashTarget = 1;
 
-  if (gameState.value === 'playing') {
+  if (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) {
     if (heldMs <= SQUASH.tapMs && !didDuckThisHold) {
       flap();
     } else if (didDuckThisHold) {
@@ -717,7 +766,8 @@ addEventListener('keydown', (e) => {
   if (e.key === 'r' || e.key === 'R') {
     resetGameVars(); beginStartScreen(); return;
   }
-  if (gameState.value === 'cutscene' || cutscenePending) return;
+  if (gameState.value === 'cutscene' && !showHealthBar) { advanceDialogue(); return; }
+  if (cutscenePending) return;
   if (e.code === 'Space') {
     e.preventDefault();
     if (gameState.value === 'start') startStartTransition();
@@ -732,7 +782,7 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => {
   if (e.code === 'Space') {
     e.preventDefault();
-    if (gameState.value === 'playing') inputRelease();
+    if (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) inputRelease();
   }
 }, { passive: false });
 
@@ -745,15 +795,16 @@ addEventListener('pointerdown', (ev) => {
   toCanvasXY(ev);
   if (gameState.value === 'start') { startStartTransition(); return; }
   if (gameState.value === 'gameover') { startRestartTransition(); return; }
-  if (gameState.value === 'startTransition' || gameState.value === 'restartTransition' || gameState.value === 'dying' || gameState.value === 'cutscene' || cutscenePending) return;
+  if (gameState.value === 'cutscene' && !showHealthBar) { advanceDialogue(); return; }
+  if (gameState.value === 'startTransition' || gameState.value === 'restartTransition' || gameState.value === 'dying' || cutscenePending) return;
   inputPress();
 });
 
 addEventListener('pointerup', () => {
-  if (gameState.value === 'playing') inputRelease();
+  if (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) inputRelease();
 });
 addEventListener('pointercancel', () => {
-  if (gameState.value === 'playing') inputRelease();
+  if (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) inputRelease();
 });
 addEventListener('blur', () => { inputRelease(); });
 
@@ -814,6 +865,13 @@ const tick = (now) => {
     }
   }
 
+  if (gameState.value === 'cutscene' && !cutsceneFade.active) {
+    const entry = DIALOGUE[dialogueIndex];
+    if (entry && dialogueChar < entry.text.length) {
+      dialogueChar = Math.min(entry.text.length, dialogueChar + Math.ceil(dialogueSpeed * dt));
+    }
+  }
+
   if (finishFadeEntities.active) {
     finishFadeEntities.t = clamp(finishFadeEntities.t + dt / finishFadeEntities.dur, 0, 1);
     if (finishFadeEntities.t >= 1) {
@@ -824,8 +882,14 @@ const tick = (now) => {
       cinematicUiHidden = true;
     }
   }
+  if (scoreFade.active) {
+    scoreFade.t = clamp(scoreFade.t + dt / scoreFade.dur, 0, 1);
+    if (scoreFade.t >= 1) scoreFade.active = false;
+  }
   if (finishFadeEntities.active) {
     setScoreOpacity(1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)));
+  } else if (scoreFade.active) {
+    setScoreOpacity(easeInOut(clamp(scoreFade.t / scoreFade.dur, 0, 1)));
   } else if (cinematicUiHidden) {
     setScoreOpacity(0);
   } else {
@@ -1000,12 +1064,23 @@ const tick = (now) => {
 
     updateMouth(player.mouth, dt, MOUTH, clamp);
 
+    if (gameState.value === 'cutscene') {
+      const groundedY = groundY() - player.r;
+      boss.r = player.r;
+      boss.y = groundedY;
+      boss.x = innerWidth - Math.max(60, boss.r * 1.2);
+      const wingSpeed = 4.6;
+      boss.wingT = (boss.wingT + dt * wingSpeed) % 1;
+    }
+
     if (finishExit) {
       player.x += WORLD.speed * dt;
       if (player.x > innerWidth + player.r + 20 && gameState.value === 'playing') {
         finishExit = false;
         cutscenePending = false;
         gameState.value = 'cutscene';
+        dialogueIndex = 0;
+        dialogueChar = 0;
         cutsceneFade.active = true;
         cutsceneFade.phase = 'in';
         cutsceneFade.t = 0;
@@ -1110,8 +1185,7 @@ const draw = () => {
       drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
     }
     if (gameState.value === 'cutscene') {
-      const bossX = innerWidth - Math.max(60, player.r * 1.2);
-      drawPlayer2(ctx, bossX, player.y, player.r, 0, player.mouth.open, player.squashY, BOSS_PALETTE, false, true, { t: player.wingT });
+      drawPlayer2(ctx, boss.x, boss.y, boss.r, 0, boss.mouth, 1, BOSS_PALETTE, false, true, { t: boss.wingT });
     }
 
     drawFloaters(ctx, floaters, clamp);
@@ -1123,13 +1197,24 @@ const draw = () => {
     if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
   }
 
-  if ((gameState.value === 'playing' || gameState.value === 'dying') && !cinematicUiHidden) {
+  if (!cinematicUiHidden) {
     const uiFade = finishFadeEntities.active
       ? (1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)))
-      : 1;
-    if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
-    drawProgressBar(ctx, w);
-    if (uiFade < 1) ctx.restore();
+      : (scoreFade.active ? easeInOut(clamp(scoreFade.t / scoreFade.dur, 0, 1)) : 1);
+    if (gameState.value === 'playing' || gameState.value === 'dying') {
+      if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
+      drawProgressBar(ctx, w);
+      if (uiFade < 1) ctx.restore();
+    }
+    if (showHealthBar && (gameState.value === 'cutscene' || gameState.value === 'playing')) {
+      if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
+      drawHealthBar(ctx);
+      if (uiFade < 1) ctx.restore();
+    }
+  }
+
+  if (gameState.value === 'cutscene' && dialogueIndex < DIALOGUE.length) {
+    drawDialogueBox(ctx, w, h);
   }
 
   if (debugHUD) {
@@ -1234,6 +1319,102 @@ const draw = () => {
     ctx.restore();
   }
 
+};
+
+const drawDialogueBox = (ctx, w, h) => {
+  const entry = DIALOGUE[dialogueIndex];
+  if (!entry) return;
+
+  const paddingX = 18;
+  const paddingY = 14;
+  const lineH = 20;
+  const maxTextW = w - paddingX * 2;
+  const boxW = w;
+  ctx.save();
+  ctx.font = '15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.textAlign = 'left';
+
+  const name = entry.speaker;
+  const prefix = `${name}: `;
+  const prefixW = ctx.measureText(prefix).width;
+  const typed = entry.text.slice(0, dialogueChar);
+  const words = typed.split(' ');
+  const lines = [];
+  let line = '';
+  let limit = Math.max(40, maxTextW - prefixW);
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > limit && line) {
+      lines.push(line);
+      line = word;
+      limit = maxTextW;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+
+  const boxH = Math.max(90, paddingY * 2 + Math.max(1, lines.length) * lineH);
+  const x = 0;
+  const y = 0;
+
+  ctx.fillStyle = '#000';
+  ctx.globalAlpha = 0.85;
+  ctx.fillRect(x, y, boxW, boxH);
+  ctx.globalAlpha = 1;
+
+  const nameColor = (name === 'FURY') ? DEFAULT_PALETTE.body : BOSS_PALETTE.body;
+  let textY = y + paddingY + lineH * 0.9;
+
+  const firstLine = lines[0] || '';
+  const lineW = ctx.measureText(firstLine).width;
+  const totalW = prefixW + lineW;
+  const startX = (w - totalW) * 0.5;
+
+  ctx.fillStyle = nameColor;
+  ctx.fillText(prefix, startX, textY);
+  ctx.fillStyle = '#f2f4f7';
+  ctx.fillText(firstLine, startX + prefixW, textY);
+
+  for (let i = 1; i < lines.length; i++) {
+    textY += lineH;
+    const lw = ctx.measureText(lines[i]).width;
+    ctx.fillStyle = '#f2f4f7';
+    ctx.fillText(lines[i], (w - lw) * 0.5, textY);
+  }
+
+  ctx.restore();
+};
+
+const drawHealthBar = (ctx) => {
+  const w = 220;
+  const h = 16;
+  const x = (innerWidth - w) * 0.5;
+  const y = 14;
+  const pad = 2;
+  const segments = 10;
+  const gap = 3;
+  const segW = (w - pad * 2 - gap * (segments - 1)) / segments;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#f2f4f7';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+
+  ctx.fillStyle = '#f2f4f7';
+  for (let i = 0; i < segments; i++) {
+    const sx = x + pad + i * (segW + gap);
+    ctx.fillRect(sx, y + pad, segW, h - pad * 2);
+  }
+
+  ctx.font = '13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#e44c4c';
+  ctx.fillText('RED', x + w * 0.5, y + h * 0.55);
+  ctx.restore();
 };
 
 const drawCheckpointFlags = (ctx, w) => {
