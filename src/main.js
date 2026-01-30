@@ -39,6 +39,7 @@ let showHealthBar = false;
 let bossCheckpointScore = 0;
 let bossCheckpointSize = 0;
 let bossCheckpointX = 0;
+let bossCheckpointHp = 0;
 let diedInBoss = false;
 
 const createSfxPool = (src, count = 4, volume = 0.6) => {
@@ -342,6 +343,7 @@ const resetGameVars = () => {
   bossCheckpointScore = score;
   bossCheckpointSize = player.baseR;
   bossCheckpointX = 0;
+  bossCheckpointHp = boss.hpMax;
   diedInBoss = false;
   finishExit = false;
   finishFadeEntities.active = false;
@@ -382,6 +384,7 @@ const beginStartScreen = () => {
   bossCheckpointScore = score;
   bossCheckpointSize = player.baseR;
   bossCheckpointX = 0;
+  bossCheckpointHp = boss.hpMax;
   diedInBoss = false;
   setScoreOpacity(1);
   cutscenePending = false;
@@ -452,6 +455,7 @@ const respawnAtCheckpoint = () => {
     boss.reactT = 0;
     boss.actionCd = 0;
     boss.wingT = 0;
+    boss.hp = (bossCheckpointHp != null) ? bossCheckpointHp : boss.hpMax;
 
     burst.active = false;
     burst.t = 0;
@@ -483,11 +487,12 @@ const respawnAtCheckpoint = () => {
     finishExit = false;
     finishFadeEntities.active = false;
     finishFadeEntities.t = 0;
-    cinematicUiHidden = true;
-    dialogueIndex = 0;
+    const resumeBossPhase = bossCheckpointHp < boss.hpMax;
+    cinematicUiHidden = !resumeBossPhase;
+    dialogueIndex = resumeBossPhase ? DIALOGUE.length : 0;
     dialogueChar = 0;
-    showHealthBar = false;
-    scoreFade.active = false;
+    showHealthBar = resumeBossPhase;
+    scoreFade.active = resumeBossPhase;
     scoreFade.t = 0;
     cutscenePending = false;
     cutsceneFade.active = true;
@@ -638,6 +643,10 @@ const advanceDialogue = () => {
   npcT = 0.05;
   redT = 0.08;
   blueT = 0.1;
+  bossCheckpointScore = score;
+  bossCheckpointSize = player.baseR;
+  bossCheckpointX = scrollX;
+  bossCheckpointHp = boss.hpMax;
 };
 
 const canSpawnNow = () => {
@@ -1185,6 +1194,10 @@ const tick = (now) => {
       onBossHit: (x, y, r) => {
         if (!bossPhase) return;
         boss.hp = Math.max(0, boss.hp - 1);
+        bossCheckpointScore = score;
+        bossCheckpointSize = player.baseR;
+        bossCheckpointX = scrollX;
+        bossCheckpointHp = boss.hp;
         if (playEatBombSfx) playEatBombSfx();
         startLineBurstAt(x, y, Math.max(0.7, r / 18));
       },
@@ -1287,6 +1300,7 @@ const tick = (now) => {
         bossCheckpointScore = score;
         bossCheckpointSize = player.baseR;
         bossCheckpointX = finishStopX + innerWidth + 40;
+        bossCheckpointHp = boss.hpMax;
         scrollX = bossCheckpointX;
         player.x = 160;
       }
