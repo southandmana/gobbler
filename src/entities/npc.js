@@ -45,6 +45,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
     addScore,
     deductScore,
     popText,
+    playEatNpcSfx,
     triggerChomp,
     updateMouth,
     clamp,
@@ -118,6 +119,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
 
       if (n.t >= 1) {
         npcs.splice(i, 1);
+        if (playEatNpcSfx) playEatNpcSfx();
         if (startHeadShatter) {
           const ang = (player.mouth && typeof player.mouth.dir === 'number') ? player.mouth.dir : 0;
           const dist = player.r * 0.55;

@@ -8,7 +8,7 @@ export const driftReds = (reds, move) => {
 };
 
 export const updateReds = (reds, player, dt, move, deps) => {
-  const { EAT, HAZARD, triggerChomp, clamp, easeInOut, lerp, startBurst, startLineBurst, startHeadShatter, groundY } = deps;
+  const { EAT, HAZARD, triggerChomp, clamp, easeInOut, lerp, startBurst, startLineBurst, startHeadShatter, playBombLeavesSfx, playBombHitsGroundSfx, playEatBombSfx, playHitBombSfx, groundY } = deps;
   const deflectSpeed = HAZARD.deflectSpeed;
   const deflectMinVxRatio = HAZARD.deflectMinVxRatio;
   for (let i = reds.length - 1; i >= 0; i--) {
@@ -30,6 +30,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
           o.state = 'deflect';
           o.t = 0;
           o.bounces = 0;
+          if (playHitBombSfx) playHitBombSfx();
           const dx = o.x - player.x;
           const dy = o.y - player.y;
           const ang = Math.atan2(dy, dx);
@@ -79,6 +80,8 @@ export const updateReds = (reds, player, dt, move, deps) => {
         if (o.bounces === 0) {
           o.bounces = 1;
         } else {
+          if (hitGround && playBombHitsGroundSfx) playBombHitsGroundSfx();
+          else if (!hitGround && playBombLeavesSfx) playBombLeavesSfx();
           if (hitGround && startLineBurst) startLineBurst(o.x, o.y, Math.max(0.6, o.r / 18));
           else startBurst(o.x, o.y, 0.45);
           reds.splice(i, 1);
@@ -96,6 +99,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
           o.t = 0;
           o.bounces = 0;
           o.r = o.r0 || o.r;
+          if (playHitBombSfx) playHitBombSfx();
           const dx = o.x - player.x;
           const dy = o.y - player.y;
           const ang = Math.atan2(dy, dx);
@@ -117,6 +121,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
       if (o.t >= 1) {
         reds.splice(i, 1);
         player.alive = false;
+        if (playEatBombSfx) playEatBombSfx();
         if (startLineBurst) startLineBurst(player.x, player.y, Math.max(0.7, (o.r0 || o.r) / 18));
         if (startHeadShatter) startHeadShatter(player.x, player.y, player.r);
         if (!startLineBurst && !startHeadShatter) startBurst(player.x, player.y, 0.55);

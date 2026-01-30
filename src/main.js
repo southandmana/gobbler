@@ -14,6 +14,39 @@ const scoreEl = document.getElementById('score');
 
 const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition
 
+const createSfxPool = (src, count = 4, volume = 0.6) => {
+  const pool = Array.from({ length: count }, () => {
+    const a = new Audio(src);
+    a.preload = 'auto';
+    a.volume = volume;
+    return a;
+  });
+  let i = 0;
+  return () => {
+    const a = pool[i];
+    i = (i + 1) % pool.length;
+    try {
+      a.currentTime = 0;
+      a.play();
+    } catch {
+      // Ignore autoplay/gesture restrictions.
+    }
+  };
+};
+
+const playJumpSfx = createSfxPool('assets/sfx/jump.wav', 4, 0.65);
+const playEatNpcSfx = createSfxPool('assets/sfx/eat_smaller_npc.wav', 3, 0.9);
+const playNpcEatsPlayerSfx = createSfxPool('assets/sfx/npc_eats_player.wav', 3, 0.7);
+const playPlayerSpawnsSfx = createSfxPool('assets/sfx/player_spawns.wav', 3, 0.75);
+const playPlayerOutsideSfx = createSfxPool('assets/sfx/player_jumps_outside_bg.wav', 2, 0.75);
+const playStartFromHomeSfx = createSfxPool('assets/sfx/start_from_home.wav', 2, 0.75);
+const playHomeStartSfx = createSfxPool('assets/sfx/home_start.wav', 1, 0.75);
+const playBombLeavesSfx = createSfxPool('assets/sfx/bomb_leaves_bg.wav', 3, 0.7);
+const playBombHitsGroundSfx = createSfxPool('assets/sfx/bomb_hits_ground.wav', 3, 0.7);
+const playEatStarSfx = createSfxPool('assets/sfx/eat_star.wav', 3, 0.7);
+const playEatBombSfx = createSfxPool('assets/sfx/eat_bomb.wav', 3, 0.8);
+const playHitBombSfx = createSfxPool('assets/sfx/hit_bomb.wav', 3, 0.75);
+
 const burst = createBurst();
 const headShatter = createShatter();
 const npcShatter = createShatter();
@@ -34,7 +67,7 @@ resize();
 const groundY = () => innerHeight - WORLD.groundH;
 
 let score = 0;
-const setScore = (n) => { score = n; scoreEl.textContent = String(n); };
+const setScore = (n) => { score = n; scoreEl.textContent = `${n} pts`; };
 const showScore = (show) => { scoreEl.style.display = show ? 'block' : 'none'; };
 let waveT = 0;
 let reliefActive = false;
@@ -263,6 +296,7 @@ const beginGame = () => {
   gameState.value = 'playing';
   updateDifficulty();
   startBurstAt(player.x, player.y, 0.45);
+  playPlayerSpawnsSfx();
 };
 
 const beginGameOver = () => {
@@ -274,6 +308,7 @@ const beginGameOver = () => {
 };
 
 const startStartTransition = () => {
+  playStartFromHomeSfx();
   screenAnim.active = true;
   screenAnim.t = 0;
   screenAnim.dur = 0.45;
@@ -489,6 +524,7 @@ const inputPress = () => {
   inputHeld = true;
   inputHeldAt = performance.now();
   didDuckThisHold = false;
+  playJumpSfx();
 };
 
 const inputRelease = () => {
@@ -558,6 +594,7 @@ addEventListener('blur', () => { inputRelease(); });
 
 let last = performance.now();
 beginStartScreen();
+playHomeStartSfx();
 
 const tick = (now) => {
   const dt = Math.min(0.033, (now - last) / 1000);
@@ -641,6 +678,7 @@ const tick = (now) => {
 
       if (player.y + (player.r * player.squashY) < 0) {
         player.alive = false;
+        playPlayerOutsideSfx();
         startBurstAt(player.x, 0, 0.55);
         gameState.value = 'dying';
         showScore(false);
@@ -657,6 +695,7 @@ const tick = (now) => {
       addScore,
       deductScore,
       popText: (txt, x, y) => popText(floaters, txt, x, y),
+      playEatNpcSfx,
       triggerChomp,
       updateMouth,
       clamp,
@@ -684,6 +723,10 @@ const tick = (now) => {
       startBurst: startBurstAt,
       startLineBurst: startLineBurstAt,
       startHeadShatter: startHeadShatterAt,
+      playBombLeavesSfx,
+      playBombHitsGroundSfx,
+      playEatBombSfx,
+      playHitBombSfx,
       state: gameState,
       showScore,
       groundY,
@@ -704,6 +747,7 @@ const tick = (now) => {
       lerp,
       dist,
       popText: (txt, x, y) => popText(floaters, txt, x, y),
+      playEatStarSfx,
       groundY,
       onBite: (x, y) => {
         biteDir = Math.atan2(y - player.y, x - player.x);
@@ -722,6 +766,7 @@ const tick = (now) => {
       player.r = lerp(player._beingEaten.r0, 0, tt);
       if (player._beingEaten.t >= 1) {
         player.alive = false;
+        playNpcEatsPlayerSfx();
         startHeadShatterAt(player._beingEaten.tx, player._beingEaten.ty, player._beingEaten.r0);
         gameState.value = 'dying';
         showScore(false);
@@ -885,7 +930,7 @@ const draw = () => {
   if (gameState.value === 'start' || gameState.value === 'startTransition') {
     drawScreenText(ctx, w, h, 'GOBBLER', 'TAP TO START', '', getScreenAlpha());
   } else if (gameState.value === 'gameover' || gameState.value === 'restartTransition') {
-    drawScreenText(ctx, w, h, 'YOU DIED', 'TAP TO RESTART', String(score), getScreenAlpha());
+    drawScreenText(ctx, w, h, 'GAME OVER', 'tap to try again', `${score} pts`, getScreenAlpha());
   } else if (gameState.value === 'paused') {
     drawScreenText(ctx, w, h, 'PAUSE', 'PRESS P TO RESUME', '', 1);
   }

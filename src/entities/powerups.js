@@ -8,7 +8,7 @@ export const driftBlues = (blues, move) => {
 };
 
 export const updateBlues = (blues, player, dt, move, deps) => {
-  const { EAT, clamp, easeInOut, lerp, triggerChomp, popText } = deps;
+  const { EAT, clamp, easeInOut, lerp, triggerChomp, popText, playEatStarSfx } = deps;
   for (let i = blues.length - 1; i >= 0; i--) {
     const o = blues[i];
 
@@ -37,6 +37,7 @@ export const updateBlues = (blues, player, dt, move, deps) => {
 
       if (o.t >= 1) {
         blues.splice(i, 1);
+        if (playEatStarSfx) playEatStarSfx();
         const before = player.r;
         player.r = player.baseR;
         if (player.y > deps.groundY() - (player.r * player.squashY)) player.y = deps.groundY() - (player.r * player.squashY);
