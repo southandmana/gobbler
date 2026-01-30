@@ -3,11 +3,11 @@ import { clamp, lerp } from '../utils/math.js';
 const player2Canvas = document.createElement('canvas');
 const player2Ctx = player2Canvas.getContext('2d');
 export const DEFAULT_PALETTE = {
-  body: '#57dbe2',
-  bodyAccent: '#52cfd6',
-  lips: '#ff8f92',
+  body: '#f2d36a',
+  bodyAccent: '#e9c85f',
+  lips: '#f28b3c',
   eye: '#2f3c14',
-  outline: '#4fd0d7',
+  outline: '#e0b954',
 };
 
 export const createPlayer = (baseR) => ({
