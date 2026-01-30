@@ -219,6 +219,58 @@ export const drawLineBurst = (ctx, burst, lerp) => {
 
 export const createFloaters = () => [];
 
+export const createSparkles = () => ({ particles: [] });
+
+export const startSparkles = (sparkles, x, y, r, rand, count = 10) => {
+  const colors = ['#ffd24a', '#ffe2a1', '#f5a623'];
+  for (let i = 0; i < count; i++) {
+    const a = rand(0, Math.PI * 2);
+    const spd = rand(40, 140);
+    const life = rand(0.35, 0.6);
+    sparkles.particles.push({
+      x,
+      y,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - rand(20, 60),
+      r0: rand(1.4, 2.8) * Math.max(0.6, r / 24),
+      life,
+      t: 0,
+      color: colors[i % colors.length],
+    });
+  }
+};
+
+export const updateSparkles = (sparkles, dt) => {
+  for (let i = sparkles.particles.length - 1; i >= 0; i--) {
+    const p = sparkles.particles[i];
+    p.t += dt;
+    if (p.t >= p.life) {
+      sparkles.particles.splice(i, 1);
+      continue;
+    }
+    p.vy += 120 * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
+};
+
+export const drawSparkles = (ctx, sparkles) => {
+  if (!sparkles.particles.length) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (const p of sparkles.particles) {
+    const tt = p.t / p.life;
+    const a = 1 - tt;
+    const r = p.r0 * (1 - tt * 0.4);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+};
+
 export const popText = (floaters, txt, x, y, color = null) => {
   const c = color || (typeof txt === 'string' && txt[0] === '-' ? '#ff2b2b' : '#f2f4f7');
   floaters.push({ x, y, txt, t: 0, color: c });

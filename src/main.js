@@ -1,7 +1,7 @@
 import { PHYS, SQUASH, STAND, WORLD, EAT, HAZARD, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
 import { clamp, rand, lerp, easeInOut, dist, lerpAngle } from './utils/math.js';
 import { makeStars, drawStars, drawSky, drawHills, drawGround, drawScreenText } from './render/background.js';
-import { createBurst, startBurst, updateBurst, drawBurst, createShatter, startHeadShatter, updateShatter, drawShatter, createLineBurst, startLineBurst, updateLineBurst, drawLineBurst, createFloaters, popText, updateFloaters, drawFloaters } from './render/effects.js';
+import { createBurst, startBurst, updateBurst, drawBurst, createShatter, startHeadShatter, updateShatter, drawShatter, createLineBurst, startLineBurst, updateLineBurst, drawLineBurst, createFloaters, popText, updateFloaters, drawFloaters, createSparkles, startSparkles, updateSparkles, drawSparkles } from './render/effects.js';
 import { createPlayer, drawPlayer2, DEFAULT_PALETTE } from './entities/player.js';
 import { updateMouth, triggerChomp } from './entities/mouth.js';
 import { makeNPC, updateNPCs, driftNPCs, drawCharacter, NPC_PALETTE } from './entities/npc.js';
@@ -52,6 +52,7 @@ const headShatter = createShatter();
 const npcShatter = createShatter();
 const lineBurst = createLineBurst();
 const floaters = createFloaters();
+const sparkles = createSparkles();
 
 const resize = () => {
   const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -270,6 +271,7 @@ const resetGameVars = () => {
   lineBurst.active = false;
   lineBurst.t = 0;
   lineBurst.puffs.length = 0;
+  sparkles.particles.length = 0;
 
   WORLD.speed = WORLD.baseSpeed;
   lastSpawnWorldX = -1e9;
@@ -288,6 +290,7 @@ const beginStartScreen = () => {
   showScore(false);
   screenAnim.active = false;
   burst.active = false;
+  sparkles.particles.length = 0;
 };
 
 const beginGame = () => {
@@ -619,6 +622,7 @@ const tick = (now) => {
   updateShatter(npcShatter, dt);
   updateLineBurst(lineBurst, dt, clamp);
   updateFloaters(floaters, dt);
+  updateSparkles(sparkles, dt);
 
   if (screenAnim.active) {
     screenAnim.t = clamp(screenAnim.t + dt / screenAnim.dur, 0, 1);
@@ -750,6 +754,7 @@ const tick = (now) => {
       popText: (txt, x, y) => popText(floaters, txt, x, y),
       playEatStarSfx,
       groundY,
+      onShrink: (x, y, r) => startSparkles(sparkles, x, y, r, rand, 12),
       onBite: (x, y) => {
         biteDir = Math.atan2(y - player.y, x - player.x);
         biteT = 0.12;
@@ -824,9 +829,9 @@ const draw = () => {
       drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
     }
 
-    ctx.fillStyle = '#ffbf4a';
     for (const o of blues) {
-      drawStar(ctx, o.x, o.y, Math.max(0, o.r));
+      ctx.fillStyle = '#ffbf4a';
+      drawStar(ctx, o.x, o.y, Math.max(0, o.r), o.specks, waveT);
     }
 
     for (const n of npcs) {
@@ -842,6 +847,7 @@ const draw = () => {
     if (burst.active) drawBurst(ctx, burst, lerp);
     if (headShatter.active) drawShatter(ctx, headShatter);
     if (npcShatter.active) drawShatter(ctx, npcShatter);
+    drawSparkles(ctx, sparkles);
     if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
   }
 

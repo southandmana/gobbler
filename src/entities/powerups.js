@@ -1,4 +1,13 @@
-export const makeBlue = (x, y, r) => ({ x, y, r, state: 'fly', t: 0, x0: 0, y0: 0, r0: 0 });
+export const makeBlue = (x, y, r) => {
+  const specks = Array.from({ length: 3 }, () => ({
+    a: Math.random() * Math.PI * 2,
+    dist: 0.7 + Math.random() * 0.55,
+    phase: Math.random() * Math.PI * 2,
+    speed: 0.6 + Math.random() * 0.8,
+    size: 0.08 + Math.random() * 0.08,
+  }));
+  return { x, y, r, state: 'fly', t: 0, x0: 0, y0: 0, r0: 0, specks };
+};
 
 export const driftBlues = (blues, move) => {
   for (let i = blues.length - 1; i >= 0; i--) {
@@ -11,6 +20,12 @@ export const updateBlues = (blues, player, dt, move, deps) => {
   const { EAT, clamp, easeInOut, lerp, triggerChomp, popText, playEatStarSfx } = deps;
   for (let i = blues.length - 1; i >= 0; i--) {
     const o = blues[i];
+
+    if (o.specks) {
+      for (const s of o.specks) {
+        s.a += s.speed * dt;
+      }
+    }
 
     if (o.state === 'fly') {
       o.x -= move;
@@ -46,6 +61,7 @@ export const updateBlues = (blues, player, dt, move, deps) => {
           player.vy = Math.max(0, player.vy);
         }
         if (before !== player.r) {
+          if (deps.onShrink) deps.onShrink(player.x, player.y, player.r);
           popText('SMALL!', player.x, player.y - player.r - 12);
         }
       }
@@ -53,7 +69,7 @@ export const updateBlues = (blues, player, dt, move, deps) => {
   }
 };
 
-export const drawStar = (ctx, x, y, r) => {
+export const drawStar = (ctx, x, y, r, specks = null, t = 0) => {
   const rr = Math.max(0, r);
   if (rr <= 0) return;
 
@@ -63,6 +79,22 @@ export const drawStar = (ctx, x, y, r) => {
   const spikes = 5;
   const outer = rr * 1.10;
   const inner = rr * 0.70;
+
+  if (specks && specks.length) {
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = '#ffe2a1';
+    for (const s of specks) {
+      const a = s.a + t * 0.6;
+      const d = rr * s.dist;
+      const alpha = 0.18 + 0.42 * (0.5 + 0.5 * Math.sin(t * 4 + s.phase));
+      const sr = Math.max(1, rr * s.size);
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * d, Math.sin(a) * d, sr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
 
   const drawStarPath = (o, i) => {
     ctx.beginPath();
