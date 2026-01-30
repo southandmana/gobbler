@@ -175,73 +175,54 @@ export const drawDynamiteBomb = (ctx, x, y, r) => {
   ctx.save();
   ctx.translate(x, y);
 
-  ctx.fillStyle = '#ff2b2b';
+  // Soft charcoal bomb body.
+  ctx.fillStyle = '#2f3238';
   ctx.beginPath();
-  ctx.ellipse(0, 0, rr * 1.02, rr * 0.92, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, rr * 1.02, rr * 0.95, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = '#d81818';
+  ctx.strokeStyle = '#3b3f46';
   ctx.lineWidth = Math.max(2, rr * 0.10);
   const osx = rr * 1.02 - ctx.lineWidth * 0.5;
-  const osy = rr * 0.92 - ctx.lineWidth * 0.5;
+  const osy = rr * 0.95 - ctx.lineWidth * 0.5;
   if (osx > 0 && osy > 0) {
     ctx.beginPath();
     ctx.ellipse(0, 0, osx, osy, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  ctx.fillStyle = 'rgba(0,0,0,0.22)';
-  const bx = -rr * 0.95, by = -rr * 0.18, bw = rr * 1.9, bh = rr * 0.36, br = rr * 0.16;
+  // Soft highlight to keep the pastel feel.
+  ctx.globalAlpha = 0.16;
+  ctx.fillStyle = '#cfd6df';
   ctx.beginPath();
-  ctx.moveTo(bx + br, by);
-  ctx.lineTo(bx + bw - br, by);
-  ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + br);
-  ctx.lineTo(bx + bw, by + bh - br);
-  ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
-  ctx.lineTo(bx + br, by + bh);
-  ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - br);
-  ctx.lineTo(bx, by + br);
-  ctx.quadraticCurveTo(bx, by, bx + br, by);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.globalAlpha = 0.18;
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.ellipse(-rr * 0.28, -rr * 0.30, rr * 0.40, rr * 0.25, -0.6, 0, Math.PI * 2);
+  ctx.ellipse(-rr * 0.28, -rr * 0.32, rr * 0.38, rr * 0.24, -0.6, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  const fx = rr * 0.35, fy = -rr * 0.58;
-  ctx.strokeStyle = '#caa34a';
-  ctx.lineWidth = Math.max(2, rr * 0.12);
+  // Small plug + fuse base.
+  ctx.fillStyle = '#b79aa3';
+  ctx.beginPath();
+  ctx.arc(rr * 0.28, -rr * 0.78, rr * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+
+  const fx = rr * 0.28, fy = -rr * 0.78;
+  ctx.strokeStyle = '#d9b4a8';
+  ctx.lineWidth = Math.max(2, rr * 0.10);
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(fx, fy);
-  ctx.quadraticCurveTo(rr * 0.95, -rr * 1.10, rr * 0.68, -rr * 1.38);
+  ctx.quadraticCurveTo(rr * 0.85, -rr * 1.08, rr * 0.55, -rr * 1.38);
   ctx.stroke();
 
-  const sx = rr * 0.68, sy = -rr * 1.38;
-  const sparkR = Math.max(2, rr * 0.12);
-
-  ctx.globalAlpha = 0.55;
-  ctx.fillStyle = '#ffd24a';
-  ctx.beginPath(); ctx.arc(sx, sy, sparkR * 2.2, 0, Math.PI * 2); ctx.fill();
+  // Pastel spark (static for now).
+  const sx = rr * 0.55, sy = -rr * 1.38;
+  const sparkR = Math.max(2, rr * 0.10);
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = '#ffd9a8';
+  ctx.beginPath(); ctx.arc(sx, sy, sparkR * 2.1, 0, Math.PI * 2); ctx.fill();
   ctx.globalAlpha = 1;
 
-  ctx.fillStyle = '#ffd24a';
+  ctx.fillStyle = '#ffc37b';
   ctx.beginPath(); ctx.arc(sx, sy, sparkR, 0, Math.PI * 2); ctx.fill();
-
-  ctx.strokeStyle = '#ffd24a';
-  ctx.lineWidth = Math.max(1.5, rr * 0.06);
-  for (let i = 0; i < 6; i++) {
-    const a = i * (Math.PI * 2 / 6);
-    const r1 = sparkR * 1.4;
-    const r2 = sparkR * 2.8;
-    ctx.beginPath();
-    ctx.moveTo(sx + Math.cos(a) * r1, sy + Math.sin(a) * r1);
-    ctx.lineTo(sx + Math.cos(a) * r2, sy + Math.sin(a) * r2);
-    ctx.stroke();
-  }
 
   ctx.restore();
 };
