@@ -104,12 +104,15 @@ let waveT = 0;
 let reliefActive = false;
 let stress = 0;
 let stressEase = 0;
+let deathDelay = 0;
 let debugHUD = false;
 let biteDir = 0;
 let biteT = 0;
 let dustTrailAcc = 0;
 let dustTrailGap = 22;
 let wasGrounded = false;
+let spawnDustDelay = 0;
+let spawnDustPending = false;
 const hudTrack = { init: {}, changed: {}, maxed: {} };
 const resetHudTrack = () => {
   hudTrack.init = {};
@@ -323,6 +326,8 @@ const resetGameVars = () => {
   dustTrailAcc = 0;
   dustTrailGap = 22;
   wasGrounded = false;
+  spawnDustDelay = 0;
+  spawnDustPending = false;
 
   WORLD.speed = WORLD.baseSpeed;
   lastSpawnWorldX = -1e9;
@@ -330,6 +335,7 @@ const resetGameVars = () => {
   reliefActive = false;
   stress = 0;
   stressEase = 0;
+  deathDelay = 0;
   resetHudTrack();
   missLog = [];
   missCount = 0;
@@ -355,6 +361,7 @@ const resetGameVars = () => {
   scoreFade.active = false;
   scoreFade.t = 0;
   boss.wingT = 0;
+  deathDelay = 0;
   setScoreOpacity(1);
   cutscenePending = false;
   cutsceneFade.active = false;
@@ -371,6 +378,8 @@ const beginStartScreen = () => {
   dustPuffs.puffs.length = 0;
   dustTrailAcc = 0;
   wasGrounded = false;
+  spawnDustDelay = 0;
+  spawnDustPending = false;
   finishExit = false;
   finishFadeEntities.active = false;
   finishFadeEntities.t = 0;
@@ -395,6 +404,8 @@ const beginStartScreen = () => {
 
 const beginGame = () => {
   resetGameVars();
+  spawnDustDelay = 0.3;
+  spawnDustPending = true;
   showScore(true);
   gameState.value = 'playing';
   updateDifficulty();
@@ -472,6 +483,8 @@ const respawnAtCheckpoint = () => {
     dustTrailAcc = 0;
     dustTrailGap = 22;
     wasGrounded = false;
+    spawnDustDelay = 0.3;
+    spawnDustPending = true;
 
     WORLD.speed = WORLD.baseSpeed;
     lastSpawnWorldX = -1e9;
@@ -555,6 +568,8 @@ const respawnAtCheckpoint = () => {
   dustTrailAcc = 0;
   dustTrailGap = 22;
   wasGrounded = false;
+  spawnDustDelay = 0.3;
+  spawnDustPending = true;
 
   WORLD.speed = WORLD.baseSpeed;
   lastSpawnWorldX = -1e9;
@@ -562,6 +577,7 @@ const respawnAtCheckpoint = () => {
   reliefActive = false;
   stress = 0;
   stressEase = 0;
+  deathDelay = 0;
   resetHudTrack();
   missLog = [];
   missCount = 0;
@@ -978,6 +994,7 @@ const tick = (now) => {
   stress = Math.max(0, stress - dt * DDA.decay);
   stressEase = clamp((stress - DDA.threshold) / (1 - DDA.threshold), 0, 1);
   if (attackFlashT > 0) attackFlashT = Math.max(0, attackFlashT - dt);
+  if (spawnDustDelay > 0) spawnDustDelay = Math.max(0, spawnDustDelay - dt);
 
   updateDifficulty();
 
@@ -1115,20 +1132,35 @@ const tick = (now) => {
       const grounded = (Math.abs(player.y - floor) < 0.5) && Math.abs(player.vy) < 1;
       const wingSpeed = grounded ? 4.6 : 6.2;
       player.wingT = (player.wingT + dt * wingSpeed) % 1;
-      if (grounded && !wasGrounded) {
-        const px = player.x + player.r * 0.15;
-        const py = groundY() + 8;
-        startDustPuff(dustPuffs, px, py, player.r * 1.8, rand);
-        dustTrailAcc = 0;
-      }
-      if (grounded && move > 0) {
-        dustTrailAcc += move;
-        while (dustTrailAcc >= dustTrailGap) {
+      if (grounded) {
+        let spawnDustNow = false;
+        if (spawnDustPending) {
+          if (spawnDustDelay <= 0) {
+            spawnDustNow = true;
+            spawnDustPending = false;
+          }
+        } else if (!wasGrounded) {
+          spawnDustNow = true;
+        }
+
+        if (spawnDustNow) {
           const px = player.x + player.r * 0.15;
           const py = groundY() + 8;
           startDustPuff(dustPuffs, px, py, player.r * 1.8, rand);
-          dustTrailAcc -= dustTrailGap;
-          dustTrailGap = rand(18, 28);
+          dustTrailAcc = 0;
+        }
+
+        if (move > 0 && !spawnDustPending) {
+          dustTrailAcc += move;
+          while (dustTrailAcc >= dustTrailGap) {
+            const px = player.x + player.r * 0.15;
+            const py = groundY() + 8;
+            startDustPuff(dustPuffs, px, py, player.r * 1.8, rand);
+            dustTrailAcc -= dustTrailGap;
+            dustTrailGap = rand(18, 28);
+          }
+        } else if (move <= 0) {
+          dustTrailAcc = 0;
         }
       } else {
         dustTrailAcc = 0;
@@ -1201,6 +1233,7 @@ const tick = (now) => {
         if (playEatBombSfx) playEatBombSfx();
         startLineBurstAt(x, y, Math.max(0.7, r / 18));
       },
+      onPlayerDeath: () => { deathDelay = 0.45; },
       attackActive: () => attackFlashT > 0,
       onBite: (x, y) => {
         biteDir = Math.atan2(y - player.y, x - player.x);
@@ -1317,6 +1350,7 @@ const tick = (now) => {
       if (player._beingEaten.t >= 1) {
         player.alive = false;
         playNpcEatsPlayerSfx();
+        deathDelay = 0.45;
         gameState.value = 'dying';
         showScore(false);
         player._beingEaten = null;
@@ -1348,7 +1382,8 @@ const tick = (now) => {
 
   if (gameState.value === 'dying') {
     if (bossPhase) diedInBoss = true;
-    if (!burst.active) respawnAtCheckpoint();
+    if (deathDelay > 0) deathDelay = Math.max(0, deathDelay - dt);
+    if (!burst.active && deathDelay <= 0) respawnAtCheckpoint();
   }
 
   draw();
