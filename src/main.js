@@ -301,6 +301,7 @@ const resetGameVars = () => {
 
   inputHeld = false;
   inputHeldAt = 0;
+  didDuckThisHold = false;
   player.squashY = 1;
   player.squashTarget = 1;
 
@@ -450,6 +451,9 @@ const respawnAtCheckpoint = () => {
     player.x = 160;
     player.emotion = 'neutral';
     player._beingEaten = null;
+    inputHeld = false;
+    inputHeldAt = 0;
+    didDuckThisHold = false;
     player.squashY = 1;
     player.squashTarget = 1;
     player.mouth.open = 0;
@@ -514,6 +518,8 @@ const respawnAtCheckpoint = () => {
     showScore(true);
     gameState.value = 'cutscene';
     updateDifficulty();
+    startBurstAt(player.x, player.y, 0.45);
+    playPlayerSpawnsSfx();
     return;
   }
 
@@ -543,6 +549,9 @@ const respawnAtCheckpoint = () => {
   player.x = 160;
   player.emotion = 'neutral';
   player._beingEaten = null;
+  inputHeld = false;
+  inputHeldAt = 0;
+  didDuckThisHold = false;
   player.squashY = 1;
   player.squashTarget = 1;
   player.mouth.open = 0;
@@ -1174,7 +1183,6 @@ const tick = (now) => {
         playPlayerOutsideSfx();
         startBurstAt(player.x, 0, 0.55);
         gameState.value = 'dying';
-        showScore(false);
       }
     }
 
@@ -1354,7 +1362,6 @@ const tick = (now) => {
         playNpcEatsPlayerSfx();
         deathDelay = 0.45;
         gameState.value = 'dying';
-        showScore(false);
         player._beingEaten = null;
       }
     }
