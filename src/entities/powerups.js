@@ -75,6 +75,7 @@ export const drawStar = (ctx, x, y, r, specks = null, t = 0) => {
 
   ctx.save();
   ctx.translate(x, y);
+  const baseAlpha = ctx.globalAlpha;
 
   const spikes = 5;
   const outer = rr * 1.10;
@@ -88,12 +89,12 @@ export const drawStar = (ctx, x, y, r, specks = null, t = 0) => {
       const d = rr * s.dist;
       const alpha = 0.18 + 0.42 * (0.5 + 0.5 * Math.sin(t * 4 + s.phase));
       const sr = Math.max(1, rr * s.size);
-      ctx.globalAlpha = alpha;
+      ctx.globalAlpha = baseAlpha * alpha;
       ctx.beginPath();
       ctx.arc(Math.cos(a) * d, Math.sin(a) * d, sr, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = baseAlpha;
   }
 
   const drawStarPath = (o, i) => {

@@ -28,6 +28,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
     boss,
     bossActive,
     onBossHit,
+    onPlayerDeath,
   } = deps;
   const deflectSpeed = HAZARD.deflectSpeed;
   const deflectMinVxRatio = HAZARD.deflectMinVxRatio;
@@ -172,11 +173,11 @@ export const updateReds = (reds, player, dt, move, deps) => {
         reds.splice(i, 1);
         player.alive = false;
         if (playEatBombSfx) playEatBombSfx();
+        if (onPlayerDeath) onPlayerDeath();
         if (startLineBurst) startLineBurst(player.x, player.y, Math.max(0.7, (o.r0 || o.r) / 18));
         if (startHeadShatter) startHeadShatter(player.x, player.y, player.r);
         if (!startLineBurst && !startHeadShatter) startBurst(player.x, player.y, 0.55);
         deps.state.value = 'dying';
-        deps.showScore(false);
       }
     }
   }
@@ -188,6 +189,7 @@ export const drawDynamiteBomb = (ctx, x, y, r) => {
 
   ctx.save();
   ctx.translate(x, y);
+  const baseAlpha = ctx.globalAlpha;
 
   // Soft charcoal bomb body.
   ctx.fillStyle = '#2f3238';
@@ -205,12 +207,12 @@ export const drawDynamiteBomb = (ctx, x, y, r) => {
   }
 
   // Soft highlight to keep the pastel feel.
-  ctx.globalAlpha = 0.16;
+  ctx.globalAlpha = baseAlpha * 0.16;
   ctx.fillStyle = '#cfd6df';
   ctx.beginPath();
   ctx.ellipse(-rr * 0.28, -rr * 0.32, rr * 0.38, rr * 0.24, -0.6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = baseAlpha;
 
   // Small plug + fuse base.
   ctx.fillStyle = '#b79aa3';
@@ -230,10 +232,10 @@ export const drawDynamiteBomb = (ctx, x, y, r) => {
   // Pastel spark (static for now).
   const sx = rr * 0.55, sy = -rr * 1.38;
   const sparkR = Math.max(2, rr * 0.10);
-  ctx.globalAlpha = 0.45;
+  ctx.globalAlpha = baseAlpha * 0.45;
   ctx.fillStyle = '#ffd9a8';
   ctx.beginPath(); ctx.arc(sx, sy, sparkR * 2.1, 0, Math.PI * 2); ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = baseAlpha;
 
   ctx.fillStyle = '#ffc37b';
   ctx.beginPath(); ctx.arc(sx, sy, sparkR, 0, Math.PI * 2); ctx.fill();

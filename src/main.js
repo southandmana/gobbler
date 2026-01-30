@@ -22,7 +22,7 @@ const BOSS_PALETTE = {
   outline: '#b04444',
   wing: '#c44b4b',
 };
-const boss = { x: 0, y: 0, r: 0, wingT: 0, mouth: 0, vy: 0, squashY: 1, duckT: 0, reactT: 0, actionCd: 0, intent: null, hp: 8, hpMax: 8 };
+const boss = { x: 0, y: 0, r: 0, wingT: 0, mouth: 0, vy: 0, squashY: 1, duckT: 0, reactT: 0, actionCd: 0, intent: null, hp: 4, hpMax: 4 };
 
 const DIALOGUE = [
   { speaker: 'RED', text: 'You really thought you could just glide past me?' },
@@ -74,6 +74,26 @@ const playBombHitsGroundSfx = createSfxPool('assets/sfx/bomb_hits_ground.wav', 3
 const playEatStarSfx = createSfxPool('assets/sfx/eat_star.wav', 3, 0.7);
 const playEatBombSfx = createSfxPool('assets/sfx/eat_bomb.wav', 3, 0.8);
 const playHitBombSfx = createSfxPool('assets/sfx/hit_bomb.wav', 3, 0.75);
+const playEnterAutoModeSfx = createSfxPool('assets/sfx/enter_auto_mode.wav', 2, 0.75);
+const playTextTapSfx = createSfxPool('assets/sfx/text_message_tap.wav', 4, 0.7);
+
+const levelMusic = (() => {
+  const audio = new Audio('assets/sfx/level1_part1_music.mp3');
+  audio.preload = 'auto';
+  audio.loop = true;
+  const baseVol = 0.6;
+  audio.volume = baseVol;
+  return { audio, baseVol, pending: false, delay: 0, fade: 0, fadeDur: 0.8, fading: false };
+})();
+
+const dialogueMusic = (() => {
+  const audio = new Audio('assets/sfx/level1_part2_music.mp3');
+  audio.preload = 'auto';
+  audio.loop = true;
+  const baseVol = 0.5;
+  audio.volume = baseVol;
+  return { audio, baseVol, pending: false, delay: 0, fade: 0, fadeDur: 0.8, fading: false };
+})();
 
 const burst = createBurst();
 const headShatter = createShatter();
@@ -113,6 +133,8 @@ let dustTrailGap = 22;
 let wasGrounded = false;
 let spawnDustDelay = 0;
 let spawnDustPending = false;
+let checkpointToastT = 0;
+const checkpointToastDur = 2.0;
 const hudTrack = { init: {}, changed: {}, maxed: {} };
 const resetHudTrack = () => {
   hudTrack.init = {};
@@ -337,6 +359,7 @@ const resetGameVars = () => {
   stress = 0;
   stressEase = 0;
   deathDelay = 0;
+  checkpointToastT = 0;
   resetHudTrack();
   missLog = [];
   missCount = 0;
@@ -363,6 +386,7 @@ const resetGameVars = () => {
   scoreFade.t = 0;
   boss.wingT = 0;
   deathDelay = 0;
+  checkpointToastT = 0;
   setScoreOpacity(1);
   cutscenePending = false;
   cutsceneFade.active = false;
@@ -373,6 +397,28 @@ const resetGameVars = () => {
 const beginStartScreen = () => {
   gameState.value = 'start';
   showScore(false);
+  levelMusic.pending = false;
+  levelMusic.delay = 0;
+  levelMusic.fade = 0;
+  levelMusic.fading = false;
+  try {
+    levelMusic.audio.pause();
+    levelMusic.audio.currentTime = 0;
+    levelMusic.audio.volume = levelMusic.baseVol;
+  } catch {
+    // ignore
+  }
+  dialogueMusic.pending = false;
+  dialogueMusic.delay = 0;
+  dialogueMusic.fade = 0;
+  dialogueMusic.fading = false;
+  try {
+    dialogueMusic.audio.pause();
+    dialogueMusic.audio.currentTime = 0;
+    dialogueMusic.audio.volume = dialogueMusic.baseVol;
+  } catch {
+    // ignore
+  }
   screenAnim.active = false;
   burst.active = false;
   sparkles.particles.length = 0;
@@ -586,6 +632,7 @@ const respawnAtCheckpoint = () => {
   stress = 0;
   stressEase = 0;
   deathDelay = 0;
+  checkpointToastT = 0;
   resetHudTrack();
   missLog = [];
   missCount = 0;
@@ -600,6 +647,16 @@ const respawnAtCheckpoint = () => {
 
 const startStartTransition = () => {
   playStartFromHomeSfx();
+  levelMusic.pending = true;
+  levelMusic.delay = 1.5;
+  levelMusic.fade = 0;
+  levelMusic.fading = false;
+  try {
+    levelMusic.audio.currentTime = 0;
+    levelMusic.audio.volume = levelMusic.baseVol;
+  } catch {
+    // ignore
+  }
   screenAnim.active = true;
   screenAnim.t = 0;
   screenAnim.dur = 0.45;
@@ -617,6 +674,7 @@ const updateCheckpointProgress = () => {
     checkpointIndex = nextIdx;
     checkpointScores[checkpointIndex] = score;
     checkpointSizes[checkpointIndex] = player.baseR;
+    checkpointToastT = checkpointToastDur;
   }
 };
 
@@ -642,6 +700,7 @@ const advanceDialogue = () => {
   if (dialogueIndex >= DIALOGUE.length) return;
   const entry = DIALOGUE[dialogueIndex];
   if (!entry) return;
+  playTextTapSfx();
   if (dialogueChar < entry.text.length) {
     dialogueChar = entry.text.length;
     return;
@@ -671,6 +730,11 @@ const advanceDialogue = () => {
   bossCheckpointSize = player.baseR;
   bossCheckpointX = scrollX;
   bossCheckpointHp = boss.hpMax;
+  dustTrailAcc = 0;
+  spawnDustDelay = 0.3;
+  spawnDustPending = true;
+  startBurstAt(player.x, player.y, 0.45);
+  playPlayerSpawnsSfx();
 };
 
 const canSpawnNow = () => {
@@ -1003,6 +1067,50 @@ const tick = (now) => {
   stressEase = clamp((stress - DDA.threshold) / (1 - DDA.threshold), 0, 1);
   if (attackFlashT > 0) attackFlashT = Math.max(0, attackFlashT - dt);
   if (spawnDustDelay > 0) spawnDustDelay = Math.max(0, spawnDustDelay - dt);
+  if (checkpointToastT > 0) checkpointToastT = Math.max(0, checkpointToastT - dt);
+  if (levelMusic.pending) {
+    levelMusic.delay = Math.max(0, levelMusic.delay - dt);
+    if (levelMusic.delay <= 0) {
+      levelMusic.pending = false;
+      try {
+        levelMusic.audio.volume = levelMusic.baseVol;
+        levelMusic.audio.play();
+      } catch {
+        // ignore autoplay restrictions
+      }
+    }
+  }
+  if (levelMusic.fading) {
+    levelMusic.fade = Math.max(0, levelMusic.fade - dt);
+    const t = (levelMusic.fadeDur > 0) ? (levelMusic.fade / levelMusic.fadeDur) : 0;
+    levelMusic.audio.volume = levelMusic.baseVol * t;
+    if (levelMusic.fade <= 0) {
+      levelMusic.fading = false;
+      try { levelMusic.audio.pause(); } catch {}
+    }
+  }
+
+  if (dialogueMusic.pending) {
+    dialogueMusic.delay = Math.max(0, dialogueMusic.delay - dt);
+    if (dialogueMusic.delay <= 0) {
+      dialogueMusic.pending = false;
+      try {
+        dialogueMusic.audio.volume = dialogueMusic.baseVol;
+        dialogueMusic.audio.play();
+      } catch {
+        // ignore autoplay restrictions
+      }
+    }
+  }
+  if (dialogueMusic.fading) {
+    dialogueMusic.fade = Math.max(0, dialogueMusic.fade - dt);
+    const t = (dialogueMusic.fadeDur > 0) ? (dialogueMusic.fade / dialogueMusic.fadeDur) : 0;
+    dialogueMusic.audio.volume = dialogueMusic.baseVol * t;
+    if (dialogueMusic.fade <= 0) {
+      dialogueMusic.fading = false;
+      try { dialogueMusic.audio.pause(); } catch {}
+    }
+  }
 
   updateDifficulty();
 
@@ -1095,6 +1203,11 @@ const tick = (now) => {
       player.r = player.baseR;
       if (player.y > groundY() - (player.r * player.squashY)) player.y = groundY() - (player.r * player.squashY);
       startBurstAt(player.x, player.y, 0.45);
+      playEnterAutoModeSfx();
+      levelMusic.pending = false;
+      levelMusic.delay = 0;
+      levelMusic.fade = levelMusic.fadeDur;
+      levelMusic.fading = true;
       npcT = 999;
       redT = 999;
       blueT = 999;
@@ -1143,38 +1256,43 @@ const tick = (now) => {
       const grounded = (Math.abs(player.y - floor) < 0.5) && Math.abs(player.vy) < 1;
       const wingSpeed = grounded ? 4.6 : 6.2;
       player.wingT = (player.wingT + dt * wingSpeed) % 1;
-      if (grounded) {
-        let spawnDustNow = false;
-        if (spawnDustPending) {
-          if (spawnDustDelay <= 0) {
+      if (activePlay) {
+        if (grounded) {
+          let spawnDustNow = false;
+          if (spawnDustPending) {
+            if (spawnDustDelay <= 0) {
+              spawnDustNow = true;
+              spawnDustPending = false;
+            }
+          } else if (!wasGrounded) {
             spawnDustNow = true;
-            spawnDustPending = false;
           }
-        } else if (!wasGrounded) {
-          spawnDustNow = true;
-        }
 
-        if (spawnDustNow) {
-          const px = player.x + player.r * 0.15;
-          const py = groundY() + 8;
-          startDustPuff(dustPuffs, px, py, player.r * 1.8, rand);
-          dustTrailAcc = 0;
-        }
-
-        if (move > 0 && !spawnDustPending) {
-          dustTrailAcc += move;
-          while (dustTrailAcc >= dustTrailGap) {
+          if (spawnDustNow) {
             const px = player.x + player.r * 0.15;
             const py = groundY() + 8;
             startDustPuff(dustPuffs, px, py, player.r * 1.8, rand);
-            dustTrailAcc -= dustTrailGap;
-            dustTrailGap = rand(18, 28);
+            dustTrailAcc = 0;
           }
-        } else if (move <= 0) {
+
+          if (move > 0 && !spawnDustPending) {
+            dustTrailAcc += move;
+            while (dustTrailAcc >= dustTrailGap) {
+              const px = player.x + player.r * 0.15;
+              const py = groundY() + 8;
+              startDustPuff(dustPuffs, px, py, player.r * 1.8, rand);
+              dustTrailAcc -= dustTrailGap;
+              dustTrailGap = rand(18, 28);
+            }
+          } else if (move <= 0) {
+            dustTrailAcc = 0;
+          }
+        } else {
           dustTrailAcc = 0;
         }
       } else {
         dustTrailAcc = 0;
+        spawnDustPending = false;
       }
       wasGrounded = grounded;
 
@@ -1335,6 +1453,18 @@ const tick = (now) => {
         gameState.value = 'cutscene';
         dialogueIndex = 0;
         dialogueChar = 0;
+        playTextTapSfx();
+        dialogueMusic.pending = false;
+        dialogueMusic.delay = 0;
+        dialogueMusic.fade = 0;
+        dialogueMusic.fading = false;
+        try {
+          dialogueMusic.audio.currentTime = 0;
+          dialogueMusic.audio.volume = dialogueMusic.baseVol;
+          dialogueMusic.audio.play();
+        } catch {
+          // ignore
+        }
         cutsceneFade.active = true;
         cutsceneFade.phase = 'in';
         cutsceneFade.t = 0;
@@ -1465,6 +1595,22 @@ const draw = () => {
     if ((gameState.value === 'playing' || gameState.value === 'dying') && !showBossUi) {
       if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
       drawProgressBar(ctx, w);
+      if (checkpointToastT > 0 && gameState.value !== 'cutscene') {
+        ctx.save();
+        ctx.globalAlpha = uiFade;
+        ctx.font = '15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#ffd45a';
+        const text = 'CHECKPOINT REACHED';
+        const tx = w - 16;
+        const ty = 14;
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(text, tx, ty);
+        ctx.fillText(text, tx, ty);
+        ctx.restore();
+      }
       if (uiFade < 1) ctx.restore();
     }
     if (showBossUi) {
@@ -1563,7 +1709,7 @@ const draw = () => {
   }
 
   if (gameState.value === 'start' || gameState.value === 'startTransition') {
-    drawScreenText(ctx, w, h, 'GOBBLER', 'TAP TO START', '', getScreenAlpha());
+    drawScreenText(ctx, w, h, "DUCK'S SAKE", 'TAP TO START', '', getScreenAlpha());
   } else if (gameState.value === 'gameover' || gameState.value === 'restartTransition') {
     drawScreenText(ctx, w, h, 'GAME OVER', 'tap to try again', `${score} pts`, getScreenAlpha());
   } else if (gameState.value === 'paused') {
@@ -1648,14 +1794,16 @@ const drawDialogueBox = (ctx, w, h) => {
 };
 
 const drawHealthBar = (ctx) => {
-  const w = 220;
+  const w = 260;
   const h = 16;
   const x = (innerWidth - w) * 0.5;
   const y = 14;
   const pad = 2;
+  const labelW = 52;
   const segments = Math.max(1, boss.hpMax || 10);
   const gap = 3;
-  const segW = (w - pad * 2 - gap * (segments - 1)) / segments;
+  const barW = w - labelW - 6;
+  const segW = (barW - pad * 2 - gap * (segments - 1)) / segments;
 
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -1664,8 +1812,12 @@ const drawHealthBar = (ctx) => {
   ctx.lineWidth = 2;
   ctx.strokeRect(x, y, w, h);
 
+  const labelX = x + 2;
+  ctx.fillStyle = '#0f0f0f';
+  ctx.fillRect(labelX, y + 2, labelW - 4, h - 4);
+
   for (let i = 0; i < segments; i++) {
-    const sx = x + pad + i * (segW + gap);
+    const sx = x + labelW + pad + i * (segW + gap);
     const on = i < boss.hp;
     ctx.fillStyle = on ? '#f2f4f7' : 'rgba(242,244,247,0.25)';
     ctx.fillRect(sx, y + pad, segW, h - pad * 2);
@@ -1675,7 +1827,7 @@ const drawHealthBar = (ctx) => {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#e44c4c';
-  ctx.fillText('RED', x + w * 0.5, y + h * 0.55);
+  ctx.fillText('RED', x + labelW * 0.5, y + h * 0.55);
   ctx.restore();
 };
 
