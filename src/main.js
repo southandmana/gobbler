@@ -14,6 +14,15 @@ const scoreEl = document.getElementById('score');
 
 const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition | cutscene
 
+const BOSS_PALETTE = {
+  body: '#d35a5a',
+  bodyAccent: '#c44b4b',
+  lips: '#7c2a2a',
+  eye: '#2b1616',
+  outline: '#b04444',
+  wing: '#c44b4b',
+};
+
 const createSfxPool = (src, count = 4, volume = 0.6) => {
   const pool = Array.from({ length: count }, () => {
     const a = new Audio(src);
@@ -71,6 +80,7 @@ const groundY = () => innerHeight - WORLD.groundH;
 let score = 0;
 const setScore = (n) => { score = n; scoreEl.textContent = `${n} pts`; };
 const showScore = (show) => { scoreEl.style.display = show ? 'block' : 'none'; };
+const setScoreOpacity = (v) => { scoreEl.style.opacity = v; };
 let waveT = 0;
 let reliefActive = false;
 let stress = 0;
@@ -213,6 +223,8 @@ const checkpointScores = [];
 const checkpointSizes = [];
 const finishStopX = Math.max(0, LEVEL.length - innerWidth + 120);
 let finishExit = false;
+const finishFadeEntities = { active: false, t: 0, dur: 0.7 };
+let cinematicUiHidden = false;
 let cutscenePending = false;
 
 const startBurstAt = (x, y, dur = 0.55) => startBurst(burst, x, y, rand, dur);
@@ -310,6 +322,10 @@ const resetGameVars = () => {
   checkpointScores[0] = score;
   checkpointSizes[0] = player.baseR;
   finishExit = false;
+  finishFadeEntities.active = false;
+  finishFadeEntities.t = 0;
+  cinematicUiHidden = false;
+  setScoreOpacity(1);
   cutscenePending = false;
   cutsceneFade.active = false;
   cutsceneFade.t = 0;
@@ -326,6 +342,10 @@ const beginStartScreen = () => {
   dustTrailAcc = 0;
   wasGrounded = false;
   finishExit = false;
+  finishFadeEntities.active = false;
+  finishFadeEntities.t = 0;
+  cinematicUiHidden = false;
+  setScoreOpacity(1);
   cutscenePending = false;
   cutsceneFade.active = false;
   cutsceneFade.t = 0;
@@ -659,7 +679,7 @@ let didDuckThisHold = false;
 let attackFlashT = 0;
 
 const inputPress = () => {
-  if (gameState.value !== 'playing' || !player.alive || player._beingEaten) return;
+  if (gameState.value !== 'playing' || finishExit || !player.alive || player._beingEaten) return;
   if (inputHeld) return;
   inputHeld = true;
   inputHeldAt = performance.now();
@@ -668,6 +688,7 @@ const inputPress = () => {
 };
 
 const inputRelease = () => {
+  if (finishExit) { inputHeld = false; player.squashTarget = 1; return; }
   if (!inputHeld) return;
 
   const heldMs = performance.now() - inputHeldAt;
@@ -701,7 +722,7 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
     if (gameState.value === 'start') startStartTransition();
     else if (gameState.value === 'gameover') startRestartTransition();
-    else inputPress();
+    else if (!finishExit) inputPress();
   }
   if (e.code === 'Enter') {
     if (gameState.value === 'playing') warpNearFinish();
@@ -793,6 +814,24 @@ const tick = (now) => {
     }
   }
 
+  if (finishFadeEntities.active) {
+    finishFadeEntities.t = clamp(finishFadeEntities.t + dt / finishFadeEntities.dur, 0, 1);
+    if (finishFadeEntities.t >= 1) {
+      finishFadeEntities.active = false;
+      npcs.length = 0;
+      reds.length = 0;
+      blues.length = 0;
+      cinematicUiHidden = true;
+    }
+  }
+  if (finishFadeEntities.active) {
+    setScoreOpacity(1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)));
+  } else if (cinematicUiHidden) {
+    setScoreOpacity(0);
+  } else {
+    setScoreOpacity(1);
+  }
+
   if (gameState.value === 'playing' || gameState.value === 'cutscene') {
     const maxScroll = (gameState.value === 'cutscene') ? Infinity : finishStopX;
     const move = Math.max(0, Math.min(WORLD.speed * dt, maxScroll - scrollX));
@@ -808,13 +847,14 @@ const tick = (now) => {
 
     if (gameState.value === 'playing' && !finishExit && scrollX >= finishStopX - 1) {
       finishExit = true;
+      inputHeld = false;
+      player.squashTarget = 1;
       npcT = 999;
       redT = 999;
       blueT = 999;
-      npcs.length = 0;
-      reds.length = 0;
-      blues.length = 0;
       trail = null;
+      finishFadeEntities.active = true;
+      finishFadeEntities.t = 0;
     }
 
     if (!finishExit && !cutscenePending && gameState.value === 'playing') npcT -= dt;
@@ -1039,25 +1079,39 @@ const draw = () => {
 
   const showEntities = !(gameState.value === 'start' || gameState.value === 'startTransition');
   if (showEntities) {
+    const fadeEntitiesAlpha = finishFadeEntities.active
+      ? (1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)))
+      : 1;
+
     drawCheckpointFlags(ctx, w);
 
+    if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
     for (const o of reds) {
       drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
     }
+    if (fadeEntitiesAlpha < 1) ctx.restore();
 
+    if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
     for (const o of blues) {
       ctx.fillStyle = '#ffbf4a';
       drawStar(ctx, o.x, o.y, Math.max(0, o.r), o.specks, waveT);
     }
+    if (fadeEntitiesAlpha < 1) ctx.restore();
 
     drawDustPuffs(ctx, dustPuffs, lerp);
 
+    if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
     for (const n of npcs) {
       drawCharacter(ctx, n.x, n.y, n.r, n.mouth.dir, n.mouth.open, n.emotion, 1, clamp, lerp);
     }
+    if (fadeEntitiesAlpha < 1) ctx.restore();
 
     if ((gameState.value === 'playing' || gameState.value === 'cutscene') && player.r > 0.3) {
       drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
+    }
+    if (gameState.value === 'cutscene') {
+      const bossX = innerWidth - Math.max(60, player.r * 1.2);
+      drawPlayer2(ctx, bossX, player.y, player.r, 0, player.mouth.open, player.squashY, BOSS_PALETTE, false, true, { t: player.wingT });
     }
 
     drawFloaters(ctx, floaters, clamp);
@@ -1069,8 +1123,13 @@ const draw = () => {
     if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
   }
 
-  if (gameState.value === 'playing' || gameState.value === 'dying') {
+  if ((gameState.value === 'playing' || gameState.value === 'dying') && !cinematicUiHidden) {
+    const uiFade = finishFadeEntities.active
+      ? (1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)))
+      : 1;
+    if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
     drawProgressBar(ctx, w);
+    if (uiFade < 1) ctx.restore();
   }
 
   if (debugHUD) {

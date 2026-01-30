@@ -8,6 +8,7 @@ export const DEFAULT_PALETTE = {
   lips: '#f28b3c',
   eye: '#2f3c14',
   outline: '#e0b954',
+  wing: '#eac866',
 };
 
 export const createPlayer = (baseR) => ({
@@ -72,7 +73,7 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
     pctx.save();
     pctx.translate(tx, r * f.ty);
     pctx.rotate(f.rot);
-    pctx.fillStyle = '#eac866';
+    pctx.fillStyle = palette.wing || palette.bodyAccent || palette.body;
     drawWing(pctx, 0, 0, wingW, wingH);
     pctx.fill();
     pctx.restore();
