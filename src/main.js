@@ -11,6 +11,14 @@ import { makeBlue, updateBlues, driftBlues, drawStar } from './entities/powerups
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
+const scoreValueEl = document.createElement('span');
+scoreValueEl.className = 'score-value';
+scoreEl.textContent = '';
+scoreEl.appendChild(scoreValueEl);
+const scoreLockEl = document.createElement('span');
+scoreLockEl.className = 'score-lock';
+scoreLockEl.setAttribute('aria-hidden', 'true');
+scoreEl.appendChild(scoreLockEl);
 
 const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition | cutscene | stageclear
 
@@ -157,8 +165,8 @@ resize();
 const groundY = () => innerHeight - WORLD.groundH;
 
 let score = 0;
-const setScore = (n) => { score = n; scoreEl.textContent = `${n} pts`; };
-const showScore = (show) => { scoreEl.style.display = show ? 'block' : 'none'; };
+const setScore = (n) => { score = n; scoreValueEl.textContent = `${n} pts`; };
+const showScore = (show) => { scoreEl.style.display = show ? 'flex' : 'none'; };
 const setScoreOpacity = (v) => { scoreEl.style.opacity = v; };
 let waveT = 0;
 let reliefActive = false;
@@ -1579,6 +1587,8 @@ const tick = (now) => {
   } else {
     setScoreOpacity(1);
   }
+  const scoreLockedUi = bossScoreLocked && showHealthBar && !cinematicUiHidden;
+  scoreEl.classList.toggle('score--locked', scoreLockedUi);
 
   const bossOutroActive = bossOutro.active;
   const bossOutroLocked = bossOutroActive && bossOutro.phase !== 'white_in' && bossOutro.phase !== 'white_hold' && bossOutro.phase !== 'white_out';
