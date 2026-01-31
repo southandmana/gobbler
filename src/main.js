@@ -2066,7 +2066,9 @@ const draw = () => {
       const bossJitter = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode'))
         ? { x: rand(-2, 2), y: rand(-2, 2) }
         : { x: 0, y: 0 };
-      const bossFlip = bossOutro.active;
+      const bossFlip = bossOutro.active
+        && bossOutro.phase !== 'white_in'
+        && bossOutro.phase !== 'white_hold';
       drawPlayer2(ctx, boss.x + bossJitter.x, boss.y + bossJitter.y, boss.r, 0, boss.mouth, boss.squashY, BOSS_PALETTE, bossFlip, true, { t: boss.wingT });
     }
 
@@ -2360,7 +2362,6 @@ const drawStageCompleteStats = (ctx, w, h) => {
     { label: 'Total Score:', value: `${score} pts` },
     { label: 'Deaths:', value: `${deathCount}` },
     { label: 'Enemies Killed:', value: `${enemiesKilled}` },
-    { label: 'Enemies Missed:', value: `${missCount}` },
     { label: 'Boss Kill Bonus:', value: `${bossBonus} pts` },
     { label: 'Boss Kill Duration:', value: timeText },
   ];
