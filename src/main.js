@@ -1463,7 +1463,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Space') {
     e.preventDefault();
     if (gameState.value === 'start') startStartTransition();
-    else if (gameState.value === 'stageclear') startRestartTransition();
+    else if (gameState.value === 'stageclear') beginStartScreen();
     else if (!finishExit) inputPress();
   }
   if (e.code === 'Enter') {
@@ -1486,7 +1486,7 @@ const toCanvasXY = (ev) => {
 addEventListener('pointerdown', (ev) => {
   const { x, y } = toCanvasXY(ev);
   if (gameState.value === 'start') { startStartTransition(); return; }
-  if (gameState.value === 'stageclear') { startRestartTransition(); return; }
+  if (gameState.value === 'stageclear') { beginStartScreen(); return; }
   if (gameState.value === 'gameover') {
     if (resumeDelay.active) return;
     const buttons = getGameOverButtons(innerWidth, innerHeight);
