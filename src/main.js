@@ -172,6 +172,7 @@ let spawnDustPending = false;
 let checkpointToastT = 0;
 const checkpointToastDur = 2.0;
 const hudTrack = { init: {}, changed: {}, maxed: {} };
+let menuScrollX = 0;
 const resetHudTrack = () => {
   hudTrack.init = {};
   hudTrack.changed = {};
@@ -469,6 +470,7 @@ const resetGameVars = () => {
 
 const beginStartScreen = () => {
   gameState.value = 'start';
+  menuScrollX = scrollX;
   showScore(false);
   levelMusic.pending = false;
   levelMusic.delay = 0;
@@ -1915,7 +1917,7 @@ const tick = (now) => {
       }
     }
   } else if (gameState.value === 'start' || gameState.value === 'startTransition') {
-    scrollX += WORLD.speed * dt;
+    menuScrollX += WORLD.speed * dt;
   } else if (gameState.value !== 'dying' && gameState.value !== 'gameover') {
     const move = WORLD.speed * dt;
     driftNPCs(npcs, move);
@@ -1945,13 +1947,17 @@ const draw = () => {
   const showPlayer = showWorldEntities || bossOutro.active;
 
   const useBlackBackdrop = bossOutro.blackBackdrop || gameState.value === 'stageclear';
+  const bgScrollX = (gameState.value === 'start' || gameState.value === 'startTransition')
+    ? menuScrollX
+    : scrollX + menuScrollX;
+
   if (useBlackBackdrop) {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, w, h);
   } else {
     drawSky(ctx, w, h);
-    drawStars(ctx, starsFar, 0.05, scrollX, groundY(), w);
-    drawHills(ctx, w, groundY(), scrollX);
+    drawStars(ctx, starsFar, 0.05, bgScrollX, groundY(), w);
+    drawHills(ctx, w, groundY(), bgScrollX);
   }
 
   const shakeAmp = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode')) ? 6 : 0;
@@ -1961,7 +1967,7 @@ const draw = () => {
   }
 
   if (gameState.value !== 'stageclear') {
-    drawGround(ctx, groundY(), w, h, scrollX);
+    drawGround(ctx, groundY(), w, h, bgScrollX);
   }
 
   const showEntities = !(gameState.value === 'start' || gameState.value === 'startTransition' || gameState.value === 'stageclear');
