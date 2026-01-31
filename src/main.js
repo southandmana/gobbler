@@ -2097,15 +2097,13 @@ const draw = () => {
         ctx.save();
         ctx.globalAlpha = uiFade;
         ctx.font = '15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'top';
-        ctx.fillStyle = '#ffd45a';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#e44c4c';
         const text = 'CHECKPOINT REACHED';
-        const tx = w - 16;
-        const ty = 14;
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-        ctx.lineWidth = 3;
-        ctx.strokeText(text, tx, ty);
+        const gy = groundY();
+        const tx = w * 0.5;
+        const ty = gy + (h - gy) * 0.5;
         ctx.fillText(text, tx, ty);
         ctx.restore();
       }
