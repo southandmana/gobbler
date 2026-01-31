@@ -52,6 +52,8 @@ let bossScoreLocked = false;
 let bossTimer = 0;
 let bossTimerActive = false;
 let bossBonusAwarded = false;
+let bossDifficulty = 0;
+let bossDifficultyActive = false;
 const bossOutro = {
   active: false,
   phase: 'idle',
@@ -206,7 +208,8 @@ const deductScore = (pts, x, y) => {
   if (debugHUD) logMiss(pts, x, y);
 };
 
-const difficulty01 = () => clamp(score / 120, 0, 1);
+const scoreDifficulty01 = () => clamp(score / 120, 0, 1);
+const difficulty01 = () => (bossDifficultyActive ? bossDifficulty : scoreDifficulty01());
 const updateDifficulty = () => {
   const d = difficulty01();
   const smooth = d * d * (3 - 2 * d);
@@ -439,6 +442,8 @@ const resetGameVars = () => {
   bossTimer = 0;
   bossTimerActive = false;
   bossBonusAwarded = false;
+  bossDifficulty = 0;
+  bossDifficultyActive = false;
   finishExit = false;
   finishFadeEntities.active = false;
   finishFadeEntities.t = 0;
@@ -527,6 +532,8 @@ const beginStartScreen = () => {
   bossTimer = 0;
   bossTimerActive = false;
   bossBonusAwarded = false;
+  bossDifficulty = 0;
+  bossDifficultyActive = false;
   bossOutro.active = false;
   bossOutro.phase = 'idle';
   bossOutro.t = 0;
@@ -563,6 +570,7 @@ const beginStageClear = () => {
   showScore(false);
   cinematicUiHidden = true;
   showHealthBar = false;
+  bossDifficultyActive = false;
 };
 
 const awardBossBonus = () => {
@@ -579,6 +587,10 @@ const awardBossBonus = () => {
 const beginBossOutro = () => {
   if (bossOutro.active) return;
   bossScoreLocked = true;
+  if (!bossDifficultyActive) {
+    bossDifficulty = clamp(scoreDifficulty01(), 0.35, 1);
+    bossDifficultyActive = true;
+  }
   gameState.value = 'cutscene';
   cutscenePending = false;
   cutsceneFade.active = false;
@@ -980,6 +992,8 @@ const advanceDialogue = () => {
   bossCheckpointTimer = 0;
   bossTimerActive = true;
   bossBonusAwarded = false;
+  bossDifficulty = clamp(scoreDifficulty01(), 0.35, 1);
+  bossDifficultyActive = true;
   boss.hp = boss.hpMax;
   boss.vy = 0;
   boss.duckT = 0;
