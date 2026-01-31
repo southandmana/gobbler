@@ -574,6 +574,34 @@ const awardBossBonus = () => {
   if (bonus > 0) setScore(score + bonus);
 };
 
+const lockBossOutroScene = () => {
+  bossOutro.blackBackdrop = true;
+
+  player.r = player.baseR;
+  player.vy = 0;
+  player.squashTarget = 1;
+  player.squashY = 1;
+  player.y = groundY() - player.r;
+
+  boss.r = player.baseR;
+  boss.x = innerWidth - Math.max(60, boss.r * 1.2);
+  boss.vy = 0;
+  boss.duckT = 0;
+  boss.squashY = 1;
+  boss.y = groundY() - boss.r;
+  boss.wingT = 0;
+
+  bossOutro.anchorPlayerX = player.x;
+  bossOutro.anchorPlayerY = player.y;
+  bossOutro.anchorBossX = boss.x;
+  bossOutro.anchorBossY = boss.y;
+  bossOutro.anchorScrollX = scrollX;
+
+  showHealthBar = false;
+  cinematicUiHidden = true;
+  showScore(false);
+};
+
 const clearBossOutroWorld = () => {
   trail = null;
   npcs.length = 0;
@@ -603,37 +631,14 @@ const startBossOutro = () => {
   bossOutro.boomSfx = 0;
 
   bossTimerActive = false;
-  bossScoreLocked = false;
   awardBossBonus();
 
-  player.r = player.baseR;
-  player.vy = 0;
-  player.squashTarget = 1;
-  player.squashY = 1;
-  player.y = groundY() - player.r;
-
-  boss.r = player.baseR;
-  boss.x = innerWidth - Math.max(60, boss.r * 1.2);
-  boss.vy = 0;
-  boss.duckT = 0;
-  boss.squashY = 1;
-  boss.y = groundY() - boss.r;
-  boss.wingT = 0;
-
-  bossOutro.anchorPlayerX = player.x;
-  bossOutro.anchorPlayerY = player.y;
-  bossOutro.anchorBossX = boss.x;
-  bossOutro.anchorBossY = boss.y;
-  bossOutro.anchorScrollX = scrollX;
   bossExplosions.length = 0;
 
   dialogueScript = DIALOGUE_OUTRO;
   dialogueMode = 'outro';
   dialogueIndex = 0;
   dialogueChar = 0;
-  showHealthBar = false;
-  cinematicUiHidden = true;
-  showScore(false);
   cutscenePending = false;
   cutsceneFade.active = false;
   cutsceneFade.t = 0;
@@ -1034,8 +1039,6 @@ const updateBossOutro = (dt) => {
     if (bossOutro.t >= bossOutro.whiteHold) {
       bossOutro.phase = 'white_out';
       bossOutro.t = 0;
-      bossOutro.blackBackdrop = true;
-      bossOutro.anchorScrollX = scrollX;
     }
   } else if (bossOutro.phase === 'white_out') {
     const tt = clamp(bossOutro.t / Math.max(0.001, bossOutro.whiteOut), 0, 1);
@@ -1044,7 +1047,7 @@ const updateBossOutro = (dt) => {
       bossOutro.phase = 'boom';
       bossOutro.t = 0;
       bossOutro.whiteAlpha = 0;
-      bossOutro.blackBackdrop = true;
+      lockBossOutroScene();
       bossOutro.blackAlpha = 0;
       bossOutro.boomSpawn = 0;
       bossOutro.boomSfx = 0;
@@ -1563,15 +1566,15 @@ const tick = (now) => {
   }
 
   const bossOutroActive = bossOutro.active;
-  const allowOutroScroll = bossOutroActive && !bossOutro.blackBackdrop;
-  const bossPhase = (gameState.value === 'cutscene' && showHealthBar && !bossOutroActive);
-  const activePlay = (gameState.value === 'playing' || bossPhase) && !bossOutroActive;
+  const bossOutroLocked = bossOutroActive && bossOutro.blackBackdrop;
+  const bossPhase = (gameState.value === 'cutscene' && showHealthBar && !bossOutroLocked);
+  const activePlay = (gameState.value === 'playing' || bossPhase) && !bossOutroLocked;
 
   if (gameState.value === 'playing' || gameState.value === 'cutscene') {
     const maxScroll = (gameState.value === 'cutscene') ? Infinity : finishStopX;
     const baseMove = Math.max(0, Math.min(WORLD.speed * dt, maxScroll - scrollX));
-    const move = (bossOutroActive && !allowOutroScroll) ? 0 : baseMove;
-    if (bossOutroActive && !allowOutroScroll) scrollX = bossOutro.anchorScrollX;
+    const move = bossOutroLocked ? 0 : baseMove;
+    if (bossOutroLocked) scrollX = bossOutro.anchorScrollX;
     else scrollX += move;
     if (inputHeld) {
       const heldMs = performance.now() - inputHeldAt;
@@ -1624,7 +1627,7 @@ const tick = (now) => {
       else blueT = 0.10;
     }
 
-    if (bossOutroActive) {
+    if (bossOutroLocked) {
       player.x = bossOutro.anchorPlayerX;
       player.y = bossOutro.anchorPlayerY;
       player.vy = 0;
@@ -1788,7 +1791,7 @@ const tick = (now) => {
     if (gameState.value === 'cutscene') {
       boss.r = player.r;
 
-      if (bossOutroActive) {
+      if (bossOutroLocked) {
         boss.x = bossOutro.anchorBossX;
         boss.y = bossOutro.anchorBossY;
         boss.vy = 0;
@@ -1839,7 +1842,7 @@ const tick = (now) => {
         const grounded = (Math.abs(boss.y - floor) < 0.5) && Math.abs(boss.vy) < 1;
         const wingSpeed = grounded ? 4.6 : 6.2;
         boss.wingT = (boss.wingT + dt * wingSpeed) % 1;
-      } else if (!bossOutroActive) {
+      } else if (!bossOutroLocked) {
         boss.vy = 0;
         boss.duckT = 0;
         boss.squashY = lerp(boss.squashY, 1, 1 - Math.pow(0.001, dt));
@@ -1939,6 +1942,7 @@ const draw = () => {
   const w = innerWidth;
   const h = innerHeight;
   ctx.clearRect(0, 0, w, h);
+  const bossOutroLocked = bossOutro.active && bossOutro.blackBackdrop;
 
   const useBlackBackdrop = bossOutro.blackBackdrop || gameState.value === 'stageclear';
   if (useBlackBackdrop) {
@@ -1996,7 +2000,7 @@ const draw = () => {
       const bossJitter = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode'))
         ? { x: rand(-2, 2), y: rand(-2, 2) }
         : { x: 0, y: 0 };
-      const bossFlip = bossOutro.active;
+      const bossFlip = bossOutroLocked;
       drawPlayer2(ctx, boss.x + bossJitter.x, boss.y + bossJitter.y, boss.r, 0, boss.mouth, boss.squashY, BOSS_PALETTE, bossFlip, true, { t: boss.wingT });
     }
 
@@ -2043,7 +2047,7 @@ const draw = () => {
     if (showBossUi) {
       if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
       drawHealthBar(ctx);
-      const showTimer = bossScoreLocked && !bossOutro.active && !cinematicUiHidden;
+      const showTimer = bossScoreLocked && !bossOutroLocked && !cinematicUiHidden;
       if (showTimer) drawBossTimer();
       else setBossTimerVisible(false);
       if (uiFade < 1) ctx.restore();
