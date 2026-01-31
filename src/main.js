@@ -323,6 +323,11 @@ let scrollX = 0;
 const screenAnim = { active: false, t: 0, dur: 0.45 };
 const cutsceneFade = { active: false, phase: 'out', t: 0, dur: 0.7 };
 const gameOverFinal = { active: false, t: 0, dur: 1.4 };
+const COINS_MAX = 5;
+let coins = COINS_MAX;
+const coinFlash = { active: false, t: 0, dur: 1.5 };
+const insertFlash = { active: false, t: 0, dur: 0.35 };
+const resumeDelay = { active: false, t: 0, dur: 1.5 };
 
 const LEVEL = { length: 20000, checkpoints: [0, 0.25, 0.5, 0.75, 1] };
 const checkpointXs = LEVEL.checkpoints.map((f) => f * LEVEL.length);
@@ -595,6 +600,17 @@ const beginGameOver = () => {
   screenAnim.dur = 0.45;
   gameOverFinal.active = false;
   gameOverFinal.t = 0;
+  coinFlash.active = false;
+  coinFlash.t = 0;
+  resumeDelay.active = false;
+  resumeDelay.t = 0;
+  insertFlash.active = false;
+  insertFlash.t = 0;
+  if (coins <= 0) {
+    coins = COINS_MAX;
+    insertFlash.active = true;
+    insertFlash.t = 0;
+  }
 };
 
 const startGameOverFinal = () => {
@@ -603,11 +619,22 @@ const startGameOverFinal = () => {
   gameOverFinal.t = 0;
 };
 
-const continueFromGameOver = () => {
+const finishContinueFromGameOver = () => {
   livesHalf = MAX_LIVES_HALF;
   screenAnim.active = false;
   gameOverFinal.active = false;
+  coinFlash.active = false;
+  resumeDelay.active = false;
   respawnAtCheckpoint();
+};
+
+const continueFromGameOver = () => {
+  if (resumeDelay.active) return;
+  coins = Math.max(0, coins - 1);
+  coinFlash.active = true;
+  coinFlash.t = 0;
+  resumeDelay.active = true;
+  resumeDelay.t = 0;
 };
 
 const beginStageClear = () => {
@@ -1461,6 +1488,7 @@ addEventListener('pointerdown', (ev) => {
   if (gameState.value === 'start') { startStartTransition(); return; }
   if (gameState.value === 'stageclear') { startRestartTransition(); return; }
   if (gameState.value === 'gameover') {
+    if (resumeDelay.active) return;
     const buttons = getGameOverButtons(innerWidth, innerHeight);
     for (const b of buttons) {
       if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
@@ -2015,7 +2043,23 @@ const tick = (now) => {
     }
   }
 
-  if (gameState.value === 'gameoverFinal' && gameOverFinal.active) {
+  if (gameState.value === 'gameover') {
+    if (coinFlash.active) {
+      coinFlash.t = Math.min(coinFlash.dur, coinFlash.t + dt);
+      if (coinFlash.t >= coinFlash.dur) coinFlash.active = false;
+    }
+    if (insertFlash.active) {
+      insertFlash.t = Math.min(insertFlash.dur, insertFlash.t + dt);
+      if (insertFlash.t >= insertFlash.dur) insertFlash.active = false;
+    }
+    if (resumeDelay.active) {
+      resumeDelay.t = Math.min(resumeDelay.dur, resumeDelay.t + dt);
+      if (resumeDelay.t >= resumeDelay.dur) {
+        resumeDelay.active = false;
+        finishContinueFromGameOver();
+      }
+    }
+  } else if (gameState.value === 'gameoverFinal' && gameOverFinal.active) {
     gameOverFinal.t = Math.min(gameOverFinal.dur, gameOverFinal.t + dt);
     if (gameOverFinal.t >= gameOverFinal.dur) {
       gameOverFinal.active = false;
@@ -2548,17 +2592,35 @@ const drawGameOverChoice = (ctx, w, h) => {
   ctx.strokeText('TRY AGAIN?', cx, h * 0.4);
   ctx.fillText('TRY AGAIN?', cx, h * 0.4);
 
-  ctx.font = '700 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
   ctx.lineWidth = 3;
   const buttons = getGameOverButtons(w, h);
+  const yesLabel = insertFlash.active ? `INSERT COINS (${COINS_MAX})` : 'DUCK YEAH!';
   for (const b of buttons) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
     ctx.strokeStyle = 'rgba(242, 244, 247, 0.7)';
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.strokeRect(b.x, b.y, b.w, b.h);
     ctx.fillStyle = '#f2f4f7';
-    ctx.fillText(b.label, b.x + b.w * 0.5, b.y + b.h * 0.56);
+    const label = (b.id === 'yes') ? yesLabel : b.label;
+    let fontSize = 16;
+    ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    while (ctx.measureText(label).width > b.w - 16 && fontSize > 11) {
+      fontSize -= 1;
+      ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    }
+    ctx.fillText(label, b.x + b.w * 0.5, b.y + b.h * 0.56);
   }
+
+  let coinsAlpha = 1;
+  if (coinFlash.active) {
+    const t = clamp(coinFlash.t / Math.max(0.001, coinFlash.dur), 0, 1);
+    coinsAlpha = t < 0.5 ? (1 - t * 2) : ((t - 0.5) * 2);
+  }
+  ctx.globalAlpha = coinsAlpha;
+  ctx.fillStyle = '#f2f4f7';
+  ctx.font = '700 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  const coinsY = buttons[0].y + buttons[0].h + 26;
+  ctx.fillText(`COINS: ${coins}`, cx, coinsY);
   ctx.restore();
 };
 
