@@ -48,6 +48,7 @@ let dialogueMode = 'intro';
 let dialogueIndex = 0;
 let dialogueChar = 0;
 const dialogueSpeed = 38;
+const dialogueMouth = { t: 0, min: 0.18, max: 0.48, speed: 10 };
 const scoreFade = { active: false, t: 0, dur: 0.6 };
 let showHealthBar = false;
 let bossCheckpointScore = 0;
@@ -1913,6 +1914,26 @@ const tick = (now) => {
     });
 
     updateMouth(player.mouth, dt, MOUTH, clamp);
+
+    if (isDialogueActive()) {
+      const entry = dialogueScript[dialogueIndex];
+      if (entry) {
+        dialogueMouth.t += dt * dialogueMouth.speed;
+        const tt = (Math.sin(dialogueMouth.t) + 1) * 0.5;
+        const talkOpen = lerp(dialogueMouth.min, dialogueMouth.max, tt);
+        const idleOpen = Math.max(0.12, dialogueMouth.min * 0.65);
+        if (entry.speaker === 'FURY') {
+          player.mouth.open = talkOpen;
+          boss.mouth = idleOpen;
+        } else if (entry.speaker === 'RED') {
+          boss.mouth = talkOpen;
+          player.mouth.open = idleOpen;
+        }
+      }
+    } else {
+      dialogueMouth.t = 0;
+      boss.mouth = 0;
+    }
 
     if (gameState.value === 'cutscene') {
       boss.r = player.r;
