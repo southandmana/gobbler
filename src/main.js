@@ -2596,8 +2596,8 @@ const drawGameOverChoice = (ctx, w, h) => {
   const buttons = getGameOverButtons(w, h);
   const yesLabel = insertFlash.active ? `INSERT COINS (${COINS_MAX})` : 'DUCK YEAH!';
   for (const b of buttons) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    ctx.strokeStyle = 'rgba(242, 244, 247, 0.7)';
+    ctx.fillStyle = '#000';
+    ctx.strokeStyle = 'rgba(242, 244, 247, 0.9)';
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.strokeRect(b.x, b.y, b.w, b.h);
     ctx.fillStyle = '#f2f4f7';
@@ -2613,14 +2613,19 @@ const drawGameOverChoice = (ctx, w, h) => {
 
   let coinsAlpha = 1;
   if (coinFlash.active) {
-    const t = clamp(coinFlash.t / Math.max(0.001, coinFlash.dur), 0, 1);
-    coinsAlpha = t < 0.5 ? (1 - t * 2) : ((t - 0.5) * 2);
+    const blinkRate = 0.08;
+    const blinkOn = (Math.floor(coinFlash.t / blinkRate) % 2) === 0;
+    coinsAlpha = blinkOn ? 1 : 0;
   }
   ctx.globalAlpha = coinsAlpha;
-  ctx.fillStyle = '#f2f4f7';
+  ctx.fillStyle = '#f2d36a';
+  ctx.strokeStyle = '#b7892a';
+  ctx.lineWidth = 3;
   ctx.font = '700 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
   const coinsY = buttons[0].y + buttons[0].h + 26;
-  ctx.fillText(`COINS: ${coins}`, cx, coinsY);
+  const coinsText = `COINS: ${coins}`;
+  ctx.strokeText(coinsText, cx, coinsY);
+  ctx.fillText(coinsText, cx, coinsY);
   ctx.restore();
 };
 
