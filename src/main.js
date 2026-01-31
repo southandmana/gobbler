@@ -48,7 +48,7 @@ let dialogueMode = 'intro';
 let dialogueIndex = 0;
 let dialogueChar = 0;
 const dialogueSpeed = 38;
-const dialogueMouth = { t: 0, min: 0.18, max: 0.48, speed: 10 };
+const dialogueMouth = { t: 0, min: 0.18, max: 0.48, speed: 30 };
 const scoreFade = { active: false, t: 0, dur: 0.6 };
 let showHealthBar = false;
 let bossCheckpointScore = 0;
@@ -1921,13 +1921,12 @@ const tick = (now) => {
         dialogueMouth.t += dt * dialogueMouth.speed;
         const tt = (Math.sin(dialogueMouth.t) + 1) * 0.5;
         const talkOpen = lerp(dialogueMouth.min, dialogueMouth.max, tt);
-        const idleOpen = Math.max(0.12, dialogueMouth.min * 0.65);
         if (entry.speaker === 'FURY') {
           player.mouth.open = talkOpen;
-          boss.mouth = idleOpen;
+          boss.mouth = 0;
         } else if (entry.speaker === 'RED') {
           boss.mouth = talkOpen;
-          player.mouth.open = idleOpen;
+          player.mouth.open = 0;
         }
       }
     } else {
