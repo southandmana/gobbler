@@ -601,6 +601,14 @@ const startBossOutro = () => {
   } catch {
     // ignore
   }
+  try {
+    levelMusic.pending = false;
+    levelMusic.delay = 0;
+    levelMusic.fade = levelMusic.fadeDur;
+    levelMusic.fading = true;
+  } catch {
+    // ignore
+  }
   playBossPopSfx();
 };
 
@@ -614,6 +622,46 @@ const startBossFinale = () => {
   startBossShatterAt(boss.x, boss.y, boss.r);
   startBurstAt(boss.x, boss.y, 0.6);
   spawnBossExplosion(Math.max(1, boss.r / 22));
+};
+
+const triggerBossOutroSkip = () => {
+  if (bossOutro.active) return;
+  gameState.value = 'cutscene';
+  cutscenePending = false;
+  cutsceneFade.active = false;
+  cutsceneFade.t = 0;
+  cutsceneFade.phase = 'out';
+  finishExit = false;
+  finishFadeEntities.active = false;
+  finishFadeEntities.t = 0;
+
+  npcs.length = 0;
+  reds.length = 0;
+  blues.length = 0;
+  npcT = 999;
+  redT = 999;
+  blueT = 999;
+  trail = null;
+
+  scrollX = finishStopX + innerWidth + 40;
+  player.x = 160;
+  player.r = player.baseR;
+  player.vy = 0;
+  player.squashTarget = 1;
+  player.squashY = 1;
+  player.y = groundY() - player.r;
+  player.emotion = 'neutral';
+
+  boss.r = player.r;
+  boss.x = innerWidth - Math.max(60, boss.r * 1.2);
+  boss.y = groundY() - boss.r;
+  boss.vy = 0;
+  boss.duckT = 0;
+  boss.squashY = 1;
+  boss.hp = 0;
+
+  showHealthBar = true;
+  startBossOutro();
 };
 
 const respawnAtCheckpoint = () => {
@@ -1259,6 +1307,10 @@ addEventListener('keydown', (e) => {
   if (e.key === 'p' || e.key === 'P') {
     if (gameState.value === 'playing') gameState.value = 'paused';
     else if (gameState.value === 'paused') gameState.value = 'playing';
+    return;
+  }
+  if (e.key === 'b' || e.key === 'B') {
+    triggerBossOutroSkip();
     return;
   }
   if (e.key === 'r' || e.key === 'R') {
