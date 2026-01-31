@@ -46,7 +46,12 @@ let bossCheckpointScore = 0;
 let bossCheckpointSize = 0;
 let bossCheckpointX = 0;
 let bossCheckpointHp = 0;
+let bossCheckpointTimer = 0;
 let diedInBoss = false;
+let bossScoreLocked = false;
+let bossTimer = 0;
+let bossTimerActive = false;
+let bossBonusAwarded = false;
 const bossOutro = {
   active: false,
   phase: 'idle',
@@ -186,12 +191,14 @@ const pointsForRadius = (r) => clamp(SCORE.fromRadius(r), SCORE.min, SCORE.max);
 
 const addScore = (pts, x, y) => {
   if (!pts) return;
+  if (bossScoreLocked) return;
   setScore(score + pts);
   popText(floaters, `+${pts}`, x, y);
 };
 
 const deductScore = (pts, x, y) => {
   if (!pts) return;
+  if (bossScoreLocked) return;
   setScore(score - pts);
   popText(floaters, `-${pts}`, x, y);
   stress = clamp(stress + DDA.bumpOnMiss, 0, 1);
@@ -425,7 +432,12 @@ const resetGameVars = () => {
   bossCheckpointSize = player.baseR;
   bossCheckpointX = 0;
   bossCheckpointHp = boss.hpMax;
+  bossCheckpointTimer = 0;
   diedInBoss = false;
+  bossScoreLocked = false;
+  bossTimer = 0;
+  bossTimerActive = false;
+  bossBonusAwarded = false;
   finishExit = false;
   finishFadeEntities.active = false;
   finishFadeEntities.t = 0;
@@ -502,12 +514,17 @@ const beginStartScreen = () => {
   bossCheckpointSize = player.baseR;
   bossCheckpointX = 0;
   bossCheckpointHp = boss.hpMax;
+  bossCheckpointTimer = 0;
   diedInBoss = false;
   setScoreOpacity(1);
   cutscenePending = false;
   cutsceneFade.active = false;
   cutsceneFade.t = 0;
   cutsceneFade.phase = 'out';
+  bossScoreLocked = false;
+  bossTimer = 0;
+  bossTimerActive = false;
+  bossBonusAwarded = false;
   bossOutro.active = false;
   bossOutro.phase = 'idle';
   bossOutro.t = 0;
@@ -546,6 +563,17 @@ const beginStageClear = () => {
   showHealthBar = false;
 };
 
+const awardBossBonus = () => {
+  if (bossBonusAwarded) return;
+  bossBonusAwarded = true;
+  const t = bossTimer;
+  let bonus = 0;
+  if (t <= 120) bonus = 1000;
+  else if (t <= 240) bonus = 500;
+  else if (t <= 360) bonus = 250;
+  if (bonus > 0) setScore(score + bonus);
+};
+
 const startBossOutro = () => {
   if (bossOutro.active) return;
   bossOutro.active = true;
@@ -557,6 +585,10 @@ const startBossOutro = () => {
   bossOutro.bossGone = false;
   bossOutro.boomSpawn = 0;
   bossOutro.boomSfx = 0;
+
+  bossTimerActive = false;
+  bossScoreLocked = false;
+  awardBossBonus();
 
   player.r = player.baseR;
   player.vy = 0;
@@ -630,7 +662,7 @@ const startBossOutro = () => {
 const startBossFinale = () => {
   bossOutro.phase = 'explode';
   bossOutro.t = 0;
-  bossOutro.bossGone = false;
+  bossOutro.bossGone = true;
   bossOutro.blackBackdrop = true;
   bossExplosions.length = 0;
   playBossExplosionSfx();
@@ -728,6 +760,10 @@ const respawnAtCheckpoint = () => {
     boss.actionCd = 0;
     boss.wingT = 0;
     boss.hp = (bossCheckpointHp != null) ? bossCheckpointHp : boss.hpMax;
+    bossScoreLocked = true;
+    bossTimer = bossCheckpointTimer || 0;
+    bossTimerActive = true;
+    bossBonusAwarded = false;
 
     burst.active = false;
     burst.t = 0;
@@ -773,6 +809,10 @@ const respawnAtCheckpoint = () => {
     cutsceneFade.active = false;
     cutsceneFade.t = 0;
     cutsceneFade.phase = 'out';
+    bossScoreLocked = true;
+    bossTimer = 0;
+    bossTimerActive = true;
+    bossBonusAwarded = false;
     bossOutro.active = false;
     bossOutro.phase = 'idle';
     bossOutro.t = 0;
@@ -943,6 +983,11 @@ const advanceDialogue = () => {
   scoreFade.active = true;
   scoreFade.t = 0;
   showHealthBar = true;
+  bossScoreLocked = true;
+  bossTimer = 0;
+  bossCheckpointTimer = 0;
+  bossTimerActive = true;
+  bossBonusAwarded = false;
   boss.hp = boss.hpMax;
   boss.vy = 0;
   boss.duckT = 0;
@@ -1394,6 +1439,9 @@ const tick = (now) => {
   stress = Math.max(0, stress - dt * DDA.decay);
   stressEase = clamp((stress - DDA.threshold) / (1 - DDA.threshold), 0, 1);
   if (attackFlashT > 0) attackFlashT = Math.max(0, attackFlashT - dt);
+  if (bossTimerActive && gameState.value === 'cutscene' && showHealthBar && !bossOutro.active) {
+    bossTimer += dt;
+  }
   if (spawnDustDelay > 0) spawnDustDelay = Math.max(0, spawnDustDelay - dt);
   if (checkpointToastT > 0) checkpointToastT = Math.max(0, checkpointToastT - dt);
   if (levelMusic.pending) {
@@ -1695,6 +1743,7 @@ const tick = (now) => {
         bossCheckpointSize = player.baseR;
         bossCheckpointX = scrollX;
         bossCheckpointHp = boss.hp;
+        bossCheckpointTimer = bossTimer;
         if (playEatBombSfx) playEatBombSfx();
         startLineBurstAt(x, y, Math.max(0.7, r / 18));
         if (boss.hp <= 0) startBossOutro();
@@ -1987,9 +2036,15 @@ const draw = () => {
     if (showBossUi) {
       if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
       drawHealthBar(ctx);
+      const showTimer = bossScoreLocked && !bossOutro.active && !cinematicUiHidden;
+      if (showTimer) drawBossTimer();
+      else setBossTimerVisible(false);
       if (uiFade < 1) ctx.restore();
+    } else {
+      setBossTimerVisible(false);
     }
   }
+  if (cinematicUiHidden) setBossTimerVisible(false);
 
   if (isDialogueActive() && dialogueIndex < dialogueScript.length) {
     drawDialogueBox(ctx, w, h);
@@ -2218,6 +2273,38 @@ const drawHealthBar = (ctx) => {
   ctx.fillStyle = '#e44c4c';
   ctx.fillText('RED', x + labelW * 0.5, y + h * 0.55);
   ctx.restore();
+};
+
+const getBossTimerEl = () => {
+  let timerEl = document.getElementById('boss-timer');
+  if (!timerEl) {
+    timerEl = document.createElement('div');
+    timerEl.id = 'boss-timer';
+    timerEl.className = 'score';
+    timerEl.style.left = 'auto';
+    timerEl.style.right = '12px';
+    timerEl.style.textAlign = 'right';
+    timerEl.style.display = 'none';
+    document.body.appendChild(timerEl);
+  }
+  return timerEl;
+};
+
+const setBossTimerVisible = (show) => {
+  const timerEl = document.getElementById('boss-timer');
+  if (!timerEl) return;
+  timerEl.style.display = show ? 'block' : 'none';
+  timerEl.style.opacity = show ? '0.9' : '0';
+};
+
+const drawBossTimer = () => {
+  const total = Math.max(0, bossTimer);
+  const mins = Math.floor(total / 60);
+  const secs = Math.floor(total % 60);
+  const timerEl = getBossTimerEl();
+  timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+  timerEl.style.display = 'block';
+  timerEl.style.opacity = '0.9';
 };
 
 const drawCheckpointFlags = (ctx, w) => {
