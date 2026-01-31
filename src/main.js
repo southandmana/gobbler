@@ -1046,6 +1046,7 @@ const updateBossOutro = (dt) => {
       bossOutro.blackAlpha = 0;
       bossOutro.boomSpawn = 0;
       bossOutro.boomSfx = 0;
+      bossOutro.anchorScrollX = scrollX;
       clearBossOutroWorld();
     }
   } else if (bossOutro.phase === 'boom') {
@@ -1561,13 +1562,15 @@ const tick = (now) => {
   }
 
   const bossOutroActive = bossOutro.active;
+  const allowOutroScroll = bossOutroActive && !bossOutro.blackBackdrop;
   const bossPhase = (gameState.value === 'cutscene' && showHealthBar && !bossOutroActive);
   const activePlay = (gameState.value === 'playing' || bossPhase) && !bossOutroActive;
 
   if (gameState.value === 'playing' || gameState.value === 'cutscene') {
     const maxScroll = (gameState.value === 'cutscene') ? Infinity : finishStopX;
-    const move = bossOutroActive ? 0 : Math.max(0, Math.min(WORLD.speed * dt, maxScroll - scrollX));
-    if (bossOutroActive) scrollX = bossOutro.anchorScrollX;
+    const baseMove = Math.max(0, Math.min(WORLD.speed * dt, maxScroll - scrollX));
+    const move = (bossOutroActive && !allowOutroScroll) ? 0 : baseMove;
+    if (bossOutroActive && !allowOutroScroll) scrollX = bossOutro.anchorScrollX;
     else scrollX += move;
     if (inputHeld) {
       const heldMs = performance.now() - inputHeldAt;
