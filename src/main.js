@@ -574,6 +574,22 @@ const awardBossBonus = () => {
   if (bonus > 0) setScore(score + bonus);
 };
 
+const clearBossOutroWorld = () => {
+  trail = null;
+  npcs.length = 0;
+  reds.length = 0;
+  blues.length = 0;
+  npcT = 999;
+  redT = 999;
+  blueT = 999;
+  floaters.length = 0;
+  burst.active = false;
+  lineBurst.active = false;
+  lineBurst.puffs.length = 0;
+  sparkles.particles.length = 0;
+  dustPuffs.puffs.length = 0;
+};
+
 const startBossOutro = () => {
   if (bossOutro.active) return;
   bossOutro.active = true;
@@ -627,20 +643,6 @@ const startBossOutro = () => {
   inputHeld = false;
   inputHeldAt = 0;
   didDuckThisHold = false;
-
-  trail = null;
-  npcs.length = 0;
-  reds.length = 0;
-  blues.length = 0;
-  npcT = 999;
-  redT = 999;
-  blueT = 999;
-  floaters.length = 0;
-  burst.active = false;
-  lineBurst.active = false;
-  lineBurst.puffs.length = 0;
-  sparkles.particles.length = 0;
-  dustPuffs.puffs.length = 0;
 
   try {
     dialogueMusic.fade = dialogueMusic.fadeDur;
@@ -1044,6 +1046,7 @@ const updateBossOutro = (dt) => {
       bossOutro.blackAlpha = 0;
       bossOutro.boomSpawn = 0;
       bossOutro.boomSfx = 0;
+      clearBossOutroWorld();
     }
   } else if (bossOutro.phase === 'boom') {
     bossOutro.whiteAlpha = 0;
