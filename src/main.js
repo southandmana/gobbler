@@ -78,6 +78,8 @@ const bossOutro = {
   boomSpawn: 0,
   boomSfx: 0,
   finaleDur: 0.7,
+  bonusHold: 1.5,
+  bonusPop: 0.9,
   fadeOut: 0.9,
   whiteAlpha: 0,
   blackAlpha: 0,
@@ -736,6 +738,8 @@ const startBossOutro = () => {
   bossOutro.bossGone = false;
   bossOutro.boomSpawn = 0;
   bossOutro.boomSfx = 0;
+  bossOutro.bonusHold = bossOutro.bonusHold || 1.5;
+  bossOutro.bonusPop = bossOutro.bonusPop || 0.9;
 
   bossTimerActive = false;
   awardBossBonus();
@@ -1164,6 +1168,24 @@ const updateBossOutro = (dt) => {
     bossOutro.whiteAlpha = 0;
     if (bossOutro.t >= bossOutro.finaleDur) {
       bossOutro.bossGone = true;
+      bossOutro.phase = 'bonus_hold';
+      bossOutro.t = 0;
+    }
+  } else if (bossOutro.phase === 'bonus_hold') {
+    bossOutro.blackBackdrop = true;
+    bossOutro.whiteAlpha = 0;
+    bossOutro.blackAlpha = 0;
+    if (bossOutro.t >= bossOutro.bonusHold) {
+      bossOutro.phase = 'bonus_pop';
+      bossOutro.t = 0;
+      const bonus = getBossBonusForTime(bossTimer);
+      popText(floaters, `+${bonus}`, player.x, player.y - player.r * 1.6);
+    }
+  } else if (bossOutro.phase === 'bonus_pop') {
+    bossOutro.blackBackdrop = true;
+    bossOutro.whiteAlpha = 0;
+    bossOutro.blackAlpha = 0;
+    if (bossOutro.t >= bossOutro.bonusPop) {
       bossOutro.phase = 'fade_out';
       bossOutro.t = 0;
       bossOutro.blackAlpha = 0;
