@@ -619,6 +619,14 @@ const startGameOverFinal = () => {
   gameState.value = 'gameoverFinal';
   gameOverFinal.active = true;
   gameOverFinal.t = 0;
+  try {
+    levelMusic.audio.pause();
+    levelMusic.audio.currentTime = 0;
+  } catch {}
+  try {
+    dialogueMusic.audio.pause();
+    dialogueMusic.audio.currentTime = 0;
+  } catch {}
 };
 
 const finishContinueFromGameOver = () => {
