@@ -1,7 +1,7 @@
 html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden}
 canvas{display:block;width:100vw;height:100vh}
 .score{
-  position:fixed;top:12px;left:12px;color:#f2d36a;
+  position:fixed;top:12px;right:12px;color:#f2d36a;
   font:700 16px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   user-select:none;opacity:.9;display:none;
   align-items:center;gap:8px;

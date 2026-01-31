@@ -168,7 +168,11 @@ resize();
 const groundY = () => innerHeight - WORLD.groundH;
 
 let score = 0;
-const setScore = (n) => { score = n; scoreValueEl.textContent = `${n} pts`; };
+const setScore = (n) => {
+  const next = Math.max(0, Math.round(n));
+  score = next;
+  scoreValueEl.textContent = `${next} pts`;
+};
 const showScore = (show) => { scoreEl.style.display = show ? 'flex' : 'none'; };
 const setScoreOpacity = (v) => { scoreEl.style.opacity = v; };
 let waveT = 0;
@@ -2515,7 +2519,7 @@ const drawLivesHud = (ctx, w) => {
   const size = Math.max(14, Math.min(22, w * 0.018));
   const gap = Math.round(size * 0.3);
   const totalW = MAX_LIVES * size + Math.max(0, MAX_LIVES - 1) * gap;
-  const x0 = Math.max(12, w - totalW - 16);
+  const x0 = Math.max(12, 16);
   const y = 12;
 
   for (let i = 0; i < MAX_LIVES; i++) {

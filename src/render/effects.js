@@ -360,7 +360,6 @@ export const updateFloaters = (floaters, dt) => {
 
 export const drawFloaters = (ctx, floaters, clamp) => {
   ctx.save();
-  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.shadowColor = 'rgba(0,0,0,0.5)';
@@ -375,6 +374,8 @@ export const drawFloaters = (ctx, floaters, clamp) => {
     const a = clamp(1 - f.t / 0.75, 0, 1);
     ctx.globalAlpha = a;
     ctx.fillStyle = f.color || '#f2f4f7';
+    const isDeduct = f.color === '#ff2b2b';
+    ctx.strokeStyle = isDeduct ? 'rgba(142,42,42,0.9)' : 'rgba(0,0,0,0.55)';
     ctx.strokeText(f.txt, f.x, f.y);
     ctx.fillText(f.txt, f.x, f.y);
   }
