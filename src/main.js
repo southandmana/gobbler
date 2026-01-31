@@ -765,7 +765,7 @@ const respawnAtCheckpoint = () => {
     boss.wingT = 0;
     boss.hp = (bossCheckpointHp != null) ? bossCheckpointHp : boss.hpMax;
     bossScoreLocked = true;
-    bossTimer = bossCheckpointTimer || 0;
+    // Keep the boss timer running across deaths.
     bossTimerActive = true;
     bossBonusAwarded = false;
 
@@ -814,7 +814,6 @@ const respawnAtCheckpoint = () => {
     cutsceneFade.t = 0;
     cutsceneFade.phase = 'out';
     bossScoreLocked = true;
-    bossTimer = 0;
     bossTimerActive = true;
     bossBonusAwarded = false;
     bossOutro.active = false;
@@ -2024,7 +2023,7 @@ const draw = () => {
       const bossJitter = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode'))
         ? { x: rand(-2, 2), y: rand(-2, 2) }
         : { x: 0, y: 0 };
-      const bossFlip = bossOutroLocked;
+      const bossFlip = bossOutro.active;
       drawPlayer2(ctx, boss.x + bossJitter.x, boss.y + bossJitter.y, boss.r, 0, boss.mouth, boss.squashY, BOSS_PALETTE, bossFlip, true, { t: boss.wingT });
     }
 
