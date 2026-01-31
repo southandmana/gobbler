@@ -557,6 +557,21 @@ const startBossOutro = () => {
   bossOutro.bossGone = false;
   bossOutro.boomSpawn = 0;
   bossOutro.boomSfx = 0;
+
+  player.r = player.baseR;
+  player.vy = 0;
+  player.squashTarget = 1;
+  player.squashY = 1;
+  player.y = groundY() - player.r;
+
+  boss.r = player.baseR;
+  boss.x = innerWidth - Math.max(60, boss.r * 1.2);
+  boss.vy = 0;
+  boss.duckT = 0;
+  boss.squashY = 1;
+  boss.y = groundY() - boss.r;
+  boss.wingT = 0;
+
   bossOutro.anchorPlayerX = player.x;
   bossOutro.anchorPlayerY = player.y;
   bossOutro.anchorBossX = boss.x;
@@ -1723,8 +1738,7 @@ const tick = (now) => {
         boss.vy = 0;
         boss.duckT = 0;
         boss.squashY = 1;
-        const wingSpeed = 4.2;
-        boss.wingT = (boss.wingT + dt * wingSpeed) % 1;
+        boss.wingT = 0;
       } else {
         boss.x = innerWidth - Math.max(60, boss.r * 1.2);
       }
@@ -1926,7 +1940,8 @@ const draw = () => {
       const bossJitter = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode'))
         ? { x: rand(-2, 2), y: rand(-2, 2) }
         : { x: 0, y: 0 };
-      drawPlayer2(ctx, boss.x + bossJitter.x, boss.y + bossJitter.y, boss.r, 0, boss.mouth, boss.squashY, BOSS_PALETTE, false, true, { t: boss.wingT });
+      const bossFlip = bossOutro.active;
+      drawPlayer2(ctx, boss.x + bossJitter.x, boss.y + bossJitter.y, boss.r, 0, boss.mouth, boss.squashY, BOSS_PALETTE, bossFlip, true, { t: boss.wingT });
     }
 
     drawFloaters(ctx, floaters, clamp);
