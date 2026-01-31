@@ -589,8 +589,6 @@ const beginBossOutro = () => {
 };
 
 const lockBossOutroScene = () => {
-  bossOutro.blackBackdrop = true;
-
   player.r = player.baseR;
   player.vy = 0;
   player.squashTarget = 1;
@@ -653,6 +651,9 @@ const startBossOutro = () => {
   dialogueMode = 'outro';
   dialogueIndex = 0;
   dialogueChar = 0;
+  showHealthBar = false;
+  cinematicUiHidden = true;
+  showScore(false);
   cutscenePending = false;
   cutsceneFade.active = false;
   cutsceneFade.t = 0;
@@ -1019,6 +1020,8 @@ const updateBossOutro = (dt) => {
     if (bossOutro.t >= bossOutro.whiteHold) {
       bossOutro.phase = 'white_out';
       bossOutro.t = 0;
+      bossOutro.blackBackdrop = true;
+      lockBossOutroScene();
     }
   } else if (bossOutro.phase === 'white_out') {
     const tt = clamp(bossOutro.t / Math.max(0.001, bossOutro.whiteOut), 0, 1);
@@ -1027,7 +1030,6 @@ const updateBossOutro = (dt) => {
       bossOutro.phase = 'boom';
       bossOutro.t = 0;
       bossOutro.whiteAlpha = 0;
-      lockBossOutroScene();
       bossOutro.blackAlpha = 0;
       bossOutro.boomSpawn = 0;
       bossOutro.boomSfx = 0;
@@ -1546,16 +1548,17 @@ const tick = (now) => {
   }
 
   const bossOutroActive = bossOutro.active;
-  const bossOutroLocked = bossOutroActive && bossOutro.blackBackdrop;
+  const bossOutroLocked = bossOutroActive && bossOutro.phase !== 'white_in' && bossOutro.phase !== 'white_hold' && bossOutro.phase !== 'white_out';
+  const bossOutroPoseLocked = bossOutroActive && bossOutro.blackBackdrop;
   const bossOutroInvulnerable = bossOutroActive && !bossOutroLocked;
   const bossPhase = (gameState.value === 'cutscene' && showHealthBar && !bossOutroLocked);
-  const activePlay = (gameState.value === 'playing' || bossPhase) && !bossOutroLocked;
+  const activePlay = (gameState.value === 'playing' || bossPhase || bossOutroInvulnerable) && !bossOutroLocked;
 
   if (gameState.value === 'playing' || gameState.value === 'cutscene') {
     const maxScroll = (gameState.value === 'cutscene') ? Infinity : finishStopX;
     const baseMove = Math.max(0, Math.min(WORLD.speed * dt, maxScroll - scrollX));
-    const move = bossOutroLocked ? 0 : baseMove;
-    if (bossOutroLocked) scrollX = bossOutro.anchorScrollX;
+    const move = bossOutroPoseLocked ? 0 : baseMove;
+    if (bossOutroPoseLocked) scrollX = bossOutro.anchorScrollX;
     else scrollX += move;
     if (inputHeld) {
       const heldMs = performance.now() - inputHeldAt;
@@ -1608,7 +1611,7 @@ const tick = (now) => {
       else blueT = 0.10;
     }
 
-    if (bossOutroLocked) {
+    if (bossOutroPoseLocked) {
       player.x = bossOutro.anchorPlayerX;
       player.y = bossOutro.anchorPlayerY;
       player.vy = 0;
@@ -1774,7 +1777,7 @@ const tick = (now) => {
     if (gameState.value === 'cutscene') {
       boss.r = player.r;
 
-      if (bossOutroLocked) {
+      if (bossOutroPoseLocked) {
         boss.x = bossOutro.anchorBossX;
         boss.y = bossOutro.anchorBossY;
         boss.vy = 0;
@@ -1928,7 +1931,12 @@ const draw = () => {
   const w = innerWidth;
   const h = innerHeight;
   ctx.clearRect(0, 0, w, h);
-  const bossOutroLocked = bossOutro.active && bossOutro.blackBackdrop;
+  const bossOutroLocked = bossOutro.active
+    && bossOutro.phase !== 'white_in'
+    && bossOutro.phase !== 'white_hold'
+    && bossOutro.phase !== 'white_out';
+  const showWorldEntities = !bossOutro.blackBackdrop;
+  const showPlayer = showWorldEntities || bossOutro.active;
 
   const useBlackBackdrop = bossOutro.blackBackdrop || gameState.value === 'stageclear';
   if (useBlackBackdrop) {
@@ -1958,31 +1966,35 @@ const draw = () => {
 
     if (!bossOutro.blackBackdrop) drawCheckpointFlags(ctx, w);
 
-    if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
-    for (const o of reds) {
-      drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
+    if (showWorldEntities) {
+      if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
+      for (const o of reds) {
+        drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
+      }
+      if (fadeEntitiesAlpha < 1) ctx.restore();
+
+      if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
+      for (const o of blues) {
+        ctx.fillStyle = '#ffbf4a';
+        drawStar(ctx, o.x, o.y, Math.max(0, o.r), o.specks, waveT);
+      }
+      if (fadeEntitiesAlpha < 1) ctx.restore();
+
+      drawDustPuffs(ctx, dustPuffs, lerp);
+
+      if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
+      for (const n of npcs) {
+        drawCharacter(ctx, n.x, n.y, n.r, n.mouth.dir, n.mouth.open, n.emotion, 1, clamp, lerp);
+      }
+      if (fadeEntitiesAlpha < 1) ctx.restore();
+
     }
-    if (fadeEntitiesAlpha < 1) ctx.restore();
 
-    if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
-    for (const o of blues) {
-      ctx.fillStyle = '#ffbf4a';
-      drawStar(ctx, o.x, o.y, Math.max(0, o.r), o.specks, waveT);
-    }
-    if (fadeEntitiesAlpha < 1) ctx.restore();
-
-    drawDustPuffs(ctx, dustPuffs, lerp);
-
-    if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
-    for (const n of npcs) {
-      drawCharacter(ctx, n.x, n.y, n.r, n.mouth.dir, n.mouth.open, n.emotion, 1, clamp, lerp);
-    }
-    if (fadeEntitiesAlpha < 1) ctx.restore();
-
-    if ((gameState.value === 'playing' || gameState.value === 'cutscene') && player.r > 0.3) {
+    if (showPlayer && (gameState.value === 'playing' || gameState.value === 'cutscene') && player.r > 0.3) {
       drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
     }
-    if (gameState.value === 'cutscene' && !(bossOutro.active && bossOutro.bossGone)) {
+
+    if (gameState.value === 'cutscene' && !(bossOutro.active && bossOutro.bossGone) && (showWorldEntities || bossOutro.active)) {
       const bossJitter = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode'))
         ? { x: rand(-2, 2), y: rand(-2, 2) }
         : { x: 0, y: 0 };
@@ -1990,13 +2002,15 @@ const draw = () => {
       drawPlayer2(ctx, boss.x + bossJitter.x, boss.y + bossJitter.y, boss.r, 0, boss.mouth, boss.squashY, BOSS_PALETTE, bossFlip, true, { t: boss.wingT });
     }
 
-    drawFloaters(ctx, floaters, clamp);
+    if (showWorldEntities || bossOutroLocked) {
+      drawFloaters(ctx, floaters, clamp);
 
-    if (burst.active) drawBurst(ctx, burst, lerp);
-    if (headShatter.active) drawShatter(ctx, headShatter);
-    if (npcShatter.active) drawShatter(ctx, npcShatter);
-    drawSparkles(ctx, sparkles);
-    if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
+      if (burst.active) drawBurst(ctx, burst, lerp);
+      if (headShatter.active) drawShatter(ctx, headShatter);
+      if (npcShatter.active) drawShatter(ctx, npcShatter);
+      drawSparkles(ctx, sparkles);
+      if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
+    }
     for (const b of bossExplosions) {
       if (b.active) drawLineBurst(ctx, b, lerp);
     }
