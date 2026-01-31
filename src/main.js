@@ -1786,6 +1786,7 @@ const tick = (now) => {
       bossActive: bossPhase,
       onBossHit: (x, y, r) => {
         if (!bossPhase) return;
+        checkpointToastT = checkpointToastDur;
         boss.hp = Math.max(0, boss.hp - 1);
         bossCheckpointScore = score;
         bossCheckpointSize = player.baseR;
@@ -2093,20 +2094,6 @@ const draw = () => {
     if ((gameState.value === 'playing' || gameState.value === 'dying') && !showBossUi) {
       if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
       drawProgressBar(ctx, w);
-      if (checkpointToastT > 0 && gameState.value !== 'cutscene') {
-        ctx.save();
-        ctx.globalAlpha = uiFade;
-        ctx.font = '15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#e44c4c';
-        const text = 'CHECKPOINT REACHED';
-        const gy = groundY();
-        const tx = w * 0.5;
-        const ty = gy + (h - gy) * 0.5;
-        ctx.fillText(text, tx, ty);
-        ctx.restore();
-      }
       if (uiFade < 1) ctx.restore();
     }
     if (showBossUi) {
@@ -2116,6 +2103,21 @@ const draw = () => {
       if (uiFade < 1) ctx.restore();
     } else {
       setBossTimerVisible(false);
+    }
+
+    if (checkpointToastT > 0 && !(gameState.value === 'cutscene' && !showHealthBar)) {
+      ctx.save();
+      ctx.globalAlpha = uiFade;
+      ctx.font = '15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#e44c4c';
+      const text = 'CHECKPOINT REACHED';
+      const gy = groundY();
+      const tx = w * 0.5;
+      const ty = gy + (h - gy) * 0.5;
+      ctx.fillText(text, tx, ty);
+      ctx.restore();
     }
 
     const showHearts = (
