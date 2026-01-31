@@ -2287,7 +2287,7 @@ const drawHealthBar = (ctx) => {
   ctx.font = '13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#e44c4c';
+  ctx.fillStyle = '#f2f4f7';
   ctx.fillText('RED', x + labelW * 0.5, y + h * 0.55);
   ctx.restore();
 };
