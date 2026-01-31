@@ -1935,7 +1935,7 @@ const tick = (now) => {
     }
 
     if (gameState.value === 'cutscene') {
-      boss.r = player.r;
+      if (!player._beingEaten) boss.r = player.r;
 
       if (bossOutroPoseLocked) {
         boss.x = bossOutro.anchorBossX;
@@ -2184,7 +2184,8 @@ const draw = () => {
       drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
     }
 
-    if (gameState.value === 'cutscene' && !(bossOutro.active && bossOutro.bossGone) && (showWorldEntities || bossOutro.active)) {
+    const showBossNow = (gameState.value === 'cutscene' || (gameState.value === 'dying' && showHealthBar));
+    if (showBossNow && !(bossOutro.active && bossOutro.bossGone) && (showWorldEntities || bossOutro.active)) {
       const bossJitter = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode'))
         ? { x: rand(-2, 2), y: rand(-2, 2) }
         : { x: 0, y: 0 };
