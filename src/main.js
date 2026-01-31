@@ -12,7 +12,7 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 
-const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition | cutscene
+const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition | cutscene | stageclear
 
 const BOSS_PALETTE = {
   body: '#d35a5a',
@@ -24,13 +24,19 @@ const BOSS_PALETTE = {
 };
 const boss = { x: 0, y: 0, r: 0, wingT: 0, mouth: 0, vy: 0, squashY: 1, duckT: 0, reactT: 0, actionCd: 0, intent: null, hp: 4, hpMax: 4 };
 
-const DIALOGUE = [
+const DIALOGUE_INTRO = [
   { speaker: 'RED', text: 'You really thought you could just glide past me?' },
   { speaker: 'FURY', text: 'Move, brother. I am done playing nice.' },
   { speaker: 'RED', text: 'Always the golden child. Still hiding behind speed?' },
   { speaker: 'FURY', text: 'Still hiding behind a big mouth?' },
   { speaker: 'RED', text: 'Then prove it. Step up.' },
 ];
+const DIALOGUE_OUTRO = [
+  { speaker: 'RED', text: 'Heh. Not bad for a featherweight.' },
+  { speaker: 'FURY', text: 'This ends now.' },
+];
+let dialogueScript = DIALOGUE_INTRO;
+let dialogueMode = 'intro';
 let dialogueIndex = 0;
 let dialogueChar = 0;
 const dialogueSpeed = 38;
@@ -41,6 +47,28 @@ let bossCheckpointSize = 0;
 let bossCheckpointX = 0;
 let bossCheckpointHp = 0;
 let diedInBoss = false;
+const bossOutro = {
+  active: false,
+  phase: 'idle',
+  t: 0,
+  whiteIn: 0.35,
+  whiteHold: 2.0,
+  whiteOut: 0.4,
+  boomDur: 2.1,
+  boomSpawn: 0,
+  boomSfx: 0,
+  finaleDur: 0.7,
+  fadeOut: 0.9,
+  whiteAlpha: 0,
+  blackAlpha: 0,
+  blackBackdrop: false,
+  bossGone: false,
+  anchorPlayerX: 0,
+  anchorPlayerY: 0,
+  anchorBossX: 0,
+  anchorBossY: 0,
+  anchorScrollX: 0,
+};
 
 const createSfxPool = (src, count = 4, volume = 0.6) => {
   const pool = Array.from({ length: count }, () => {
@@ -76,6 +104,8 @@ const playEatBombSfx = createSfxPool('assets/sfx/eat_bomb.wav', 3, 0.8);
 const playHitBombSfx = createSfxPool('assets/sfx/hit_bomb.wav', 3, 0.75);
 const playEnterAutoModeSfx = createSfxPool('assets/sfx/enter_auto_mode.wav', 2, 0.75);
 const playTextTapSfx = createSfxPool('assets/sfx/text_message_tap.wav', 4, 0.7);
+const playBossExplosionSfx = createSfxPool('assets/sfx/bomb_hits_ground.wav', 5, 0.75);
+const playBossPopSfx = createSfxPool('assets/sfx/eat_bomb.wav', 4, 0.7);
 
 const levelMusic = (() => {
   const audio = new Audio('assets/sfx/level1_part1_music.mp3');
@@ -99,6 +129,7 @@ const burst = createBurst();
 const headShatter = createShatter();
 const npcShatter = createShatter();
 const lineBurst = createLineBurst();
+const bossExplosions = [];
 const floaters = createFloaters();
 const sparkles = createSparkles();
 const dustPuffs = createDustPuffs();
@@ -297,6 +328,26 @@ const startNpcShatterAt = (x, y, r) => startHeadShatter(
   clamp,
   { countScale: 0.6, countMin: 4, countMax: 8, sizeMin: 0.05, sizeMax: 0.09, fadeDur: 0.22, velScale: 1 }
 );
+const startBossShatterAt = (x, y, r) => startHeadShatter(
+  headShatter,
+  x,
+  y,
+  r,
+  rand,
+  BOSS_PALETTE,
+  groundY(),
+  1.15,
+  clamp,
+  { countScale: 1.1, countMin: 10, countMax: 18, sizeMin: 0.06, sizeMax: 0.12, fadeDur: 0.8, velScale: 1.1 }
+);
+const spawnBossExplosion = (scale = 1) => {
+  const burst = createLineBurst();
+  const jitterX = rand(-1, 1) * Math.max(6, boss.r * 0.45);
+  const jitterY = rand(-1, 1) * Math.max(6, boss.r * 0.35);
+  const dur = rand(0.14, 0.22);
+  startLineBurst(burst, boss.x + jitterX, boss.y + jitterY, rand, scale, dur);
+  bossExplosions.push(burst);
+};
 
 const resetGameVars = () => {
   npcs.length = 0;
@@ -392,6 +443,16 @@ const resetGameVars = () => {
   cutsceneFade.active = false;
   cutsceneFade.t = 0;
   cutsceneFade.phase = 'out';
+  bossOutro.active = false;
+  bossOutro.phase = 'idle';
+  bossOutro.t = 0;
+  bossOutro.whiteAlpha = 0;
+  bossOutro.blackAlpha = 0;
+  bossOutro.blackBackdrop = false;
+  bossOutro.bossGone = false;
+  bossExplosions.length = 0;
+  dialogueScript = DIALOGUE_INTRO;
+  dialogueMode = 'intro';
 };
 
 const beginStartScreen = () => {
@@ -447,6 +508,16 @@ const beginStartScreen = () => {
   cutsceneFade.active = false;
   cutsceneFade.t = 0;
   cutsceneFade.phase = 'out';
+  bossOutro.active = false;
+  bossOutro.phase = 'idle';
+  bossOutro.t = 0;
+  bossOutro.whiteAlpha = 0;
+  bossOutro.blackAlpha = 0;
+  bossOutro.blackBackdrop = false;
+  bossOutro.bossGone = false;
+  bossExplosions.length = 0;
+  dialogueScript = DIALOGUE_INTRO;
+  dialogueMode = 'intro';
 };
 
 const beginGame = () => {
@@ -466,6 +537,83 @@ const beginGameOver = () => {
   screenAnim.active = true;
   screenAnim.t = 0;
   screenAnim.dur = 0.45;
+};
+
+const beginStageClear = () => {
+  gameState.value = 'stageclear';
+  showScore(false);
+  cinematicUiHidden = true;
+  showHealthBar = false;
+};
+
+const startBossOutro = () => {
+  if (bossOutro.active) return;
+  bossOutro.active = true;
+  bossOutro.phase = 'white_in';
+  bossOutro.t = 0;
+  bossOutro.whiteAlpha = 0;
+  bossOutro.blackAlpha = 0;
+  bossOutro.blackBackdrop = false;
+  bossOutro.bossGone = false;
+  bossOutro.boomSpawn = 0;
+  bossOutro.boomSfx = 0;
+  bossOutro.anchorPlayerX = player.x;
+  bossOutro.anchorPlayerY = player.y;
+  bossOutro.anchorBossX = boss.x;
+  bossOutro.anchorBossY = boss.y;
+  bossOutro.anchorScrollX = scrollX;
+  bossExplosions.length = 0;
+
+  dialogueScript = DIALOGUE_OUTRO;
+  dialogueMode = 'outro';
+  dialogueIndex = 0;
+  dialogueChar = 0;
+  showHealthBar = false;
+  cinematicUiHidden = true;
+  showScore(false);
+  cutscenePending = false;
+  cutsceneFade.active = false;
+  cutsceneFade.t = 0;
+  cutsceneFade.phase = 'out';
+  finishFadeEntities.active = false;
+  finishFadeEntities.t = 0;
+  inputHeld = false;
+  inputHeldAt = 0;
+  didDuckThisHold = false;
+
+  trail = null;
+  npcs.length = 0;
+  reds.length = 0;
+  blues.length = 0;
+  npcT = 999;
+  redT = 999;
+  blueT = 999;
+  floaters.length = 0;
+  burst.active = false;
+  lineBurst.active = false;
+  lineBurst.puffs.length = 0;
+  sparkles.particles.length = 0;
+  dustPuffs.puffs.length = 0;
+
+  try {
+    dialogueMusic.fade = dialogueMusic.fadeDur;
+    dialogueMusic.fading = true;
+  } catch {
+    // ignore
+  }
+  playBossPopSfx();
+};
+
+const startBossFinale = () => {
+  bossOutro.phase = 'explode';
+  bossOutro.t = 0;
+  bossOutro.bossGone = false;
+  bossOutro.blackBackdrop = true;
+  bossExplosions.length = 0;
+  playBossExplosionSfx();
+  startBossShatterAt(boss.x, boss.y, boss.r);
+  startBurstAt(boss.x, boss.y, 0.6);
+  spawnBossExplosion(Math.max(1, boss.r / 22));
 };
 
 const respawnAtCheckpoint = () => {
@@ -551,7 +699,9 @@ const respawnAtCheckpoint = () => {
     finishFadeEntities.active = false;
     finishFadeEntities.t = 0;
     cinematicUiHidden = false;
-    dialogueIndex = DIALOGUE.length;
+    dialogueScript = DIALOGUE_INTRO;
+    dialogueMode = 'intro';
+    dialogueIndex = dialogueScript.length;
     dialogueChar = 0;
     showHealthBar = true;
     scoreFade.active = false;
@@ -560,6 +710,14 @@ const respawnAtCheckpoint = () => {
     cutsceneFade.active = false;
     cutsceneFade.t = 0;
     cutsceneFade.phase = 'out';
+    bossOutro.active = false;
+    bossOutro.phase = 'idle';
+    bossOutro.t = 0;
+    bossOutro.whiteAlpha = 0;
+    bossOutro.blackAlpha = 0;
+    bossOutro.blackBackdrop = false;
+    bossOutro.bossGone = false;
+    bossExplosions.length = 0;
     setScoreOpacity(1);
     showScore(true);
     gameState.value = 'cutscene';
@@ -697,21 +855,27 @@ const warpNearFinish = () => {
 };
 
 const advanceDialogue = () => {
-  if (dialogueIndex >= DIALOGUE.length) return;
-  const entry = DIALOGUE[dialogueIndex];
+  if (dialogueIndex >= dialogueScript.length) return;
+  const entry = dialogueScript[dialogueIndex];
   if (!entry) return;
   playTextTapSfx();
   if (dialogueChar < entry.text.length) {
     dialogueChar = entry.text.length;
     return;
   }
-  if (dialogueIndex < DIALOGUE.length - 1) {
+  if (dialogueIndex < dialogueScript.length - 1) {
     dialogueIndex += 1;
     dialogueChar = 0;
     return;
   }
-  dialogueIndex = DIALOGUE.length;
+  dialogueIndex = dialogueScript.length;
   dialogueChar = 0;
+
+  if (dialogueMode === 'outro') {
+    startBossFinale();
+    return;
+  }
+
   cinematicUiHidden = false;
   scoreFade.active = true;
   scoreFade.t = 0;
@@ -735,6 +899,101 @@ const advanceDialogue = () => {
   spawnDustPending = true;
   startBurstAt(player.x, player.y, 0.45);
   playPlayerSpawnsSfx();
+};
+
+const isDialogueActive = () => {
+  if (bossOutro.active) return bossOutro.phase === 'dialogue';
+  return (gameState.value === 'cutscene' && !showHealthBar);
+};
+
+const updateBossOutro = (dt) => {
+  if (!bossOutro.active) return;
+
+  bossOutro.t += dt;
+
+  if (bossOutro.phase === 'white_in') {
+    const tt = clamp(bossOutro.t / Math.max(0.001, bossOutro.whiteIn), 0, 1);
+    bossOutro.whiteAlpha = easeInOut(tt);
+    if (bossOutro.t >= bossOutro.whiteIn) {
+      bossOutro.phase = 'white_hold';
+      bossOutro.t = 0;
+      bossOutro.whiteAlpha = 1;
+    }
+  } else if (bossOutro.phase === 'white_hold') {
+    bossOutro.whiteAlpha = 1;
+    if (bossOutro.t >= bossOutro.whiteHold) {
+      bossOutro.phase = 'white_out';
+      bossOutro.t = 0;
+    }
+  } else if (bossOutro.phase === 'white_out') {
+    const tt = clamp(bossOutro.t / Math.max(0.001, bossOutro.whiteOut), 0, 1);
+    bossOutro.whiteAlpha = 1 - easeInOut(tt);
+    if (bossOutro.t >= bossOutro.whiteOut) {
+      bossOutro.phase = 'boom';
+      bossOutro.t = 0;
+      bossOutro.whiteAlpha = 0;
+      bossOutro.blackBackdrop = true;
+      bossOutro.blackAlpha = 0;
+      bossOutro.boomSpawn = 0;
+      bossOutro.boomSfx = 0;
+    }
+  } else if (bossOutro.phase === 'boom') {
+    bossOutro.whiteAlpha = 0;
+    bossOutro.blackBackdrop = true;
+    bossOutro.blackAlpha = 0;
+
+    bossOutro.boomSpawn = Math.max(0, bossOutro.boomSpawn - dt);
+    if (bossOutro.boomSpawn <= 0) {
+      spawnBossExplosion(Math.max(0.8, boss.r / 26));
+      bossOutro.boomSpawn = rand(0.08, 0.16);
+    }
+
+    bossOutro.boomSfx = Math.max(0, bossOutro.boomSfx - dt);
+    if (bossOutro.boomSfx <= 0) {
+      (Math.random() < 0.5 ? playBossExplosionSfx : playBossPopSfx)();
+      bossOutro.boomSfx = rand(0.12, 0.22);
+    }
+
+    if (bossOutro.t >= bossOutro.boomDur) {
+      bossOutro.phase = 'dialogue';
+      bossOutro.t = 0;
+      bossOutro.boomSpawn = 0;
+      bossOutro.boomSfx = 0;
+      playTextTapSfx();
+    }
+  } else if (bossOutro.phase === 'dialogue') {
+    bossOutro.whiteAlpha = 0;
+    bossOutro.blackBackdrop = true;
+    bossOutro.blackAlpha = 0;
+  } else if (bossOutro.phase === 'explode') {
+    bossOutro.blackBackdrop = true;
+    bossOutro.whiteAlpha = 0;
+    if (bossOutro.t >= bossOutro.finaleDur) {
+      bossOutro.bossGone = true;
+      bossOutro.phase = 'fade_out';
+      bossOutro.t = 0;
+      bossOutro.blackAlpha = 0;
+    }
+  } else if (bossOutro.phase === 'fade_out') {
+    bossOutro.blackBackdrop = true;
+    const tt = clamp(bossOutro.t / Math.max(0.001, bossOutro.fadeOut), 0, 1);
+    bossOutro.blackAlpha = easeInOut(tt);
+    if (bossOutro.t >= bossOutro.fadeOut) {
+      bossOutro.active = false;
+      bossOutro.phase = 'idle';
+      bossOutro.whiteAlpha = 0;
+      bossOutro.blackAlpha = 0;
+      bossOutro.blackBackdrop = false;
+      bossExplosions.length = 0;
+      beginStageClear();
+    }
+  }
+
+  for (let i = bossExplosions.length - 1; i >= 0; i--) {
+    const b = bossExplosions[i];
+    updateLineBurst(b, dt, clamp);
+    if (!b.active) bossExplosions.splice(i, 1);
+  }
 };
 
 const canSpawnNow = () => {
@@ -1005,11 +1264,12 @@ addEventListener('keydown', (e) => {
   if (e.key === 'r' || e.key === 'R') {
     resetGameVars(); beginStartScreen(); return;
   }
-  if (gameState.value === 'cutscene' && !showHealthBar) { advanceDialogue(); return; }
+  if (isDialogueActive()) { advanceDialogue(); return; }
   if (cutscenePending) return;
   if (e.code === 'Space') {
     e.preventDefault();
     if (gameState.value === 'start') startStartTransition();
+    else if (gameState.value === 'stageclear') startRestartTransition();
     else if (gameState.value === 'gameover') startRestartTransition();
     else if (!finishExit) inputPress();
   }
@@ -1033,8 +1293,9 @@ const toCanvasXY = (ev) => {
 addEventListener('pointerdown', (ev) => {
   toCanvasXY(ev);
   if (gameState.value === 'start') { startStartTransition(); return; }
+  if (gameState.value === 'stageclear') { startRestartTransition(); return; }
   if (gameState.value === 'gameover') { startRestartTransition(); return; }
-  if (gameState.value === 'cutscene' && !showHealthBar) { advanceDialogue(); return; }
+  if (isDialogueActive()) { advanceDialogue(); return; }
   if (gameState.value === 'startTransition' || gameState.value === 'restartTransition' || gameState.value === 'dying' || cutscenePending) return;
   inputPress();
 });
@@ -1121,6 +1382,7 @@ const tick = (now) => {
   updateFloaters(floaters, dt);
   updateSparkles(sparkles, dt);
   updateDustPuffs(dustPuffs, dt);
+  updateBossOutro(dt);
 
   if (screenAnim.active) {
     screenAnim.t = clamp(screenAnim.t + dt / screenAnim.dur, 0, 1);
@@ -1149,8 +1411,8 @@ const tick = (now) => {
     }
   }
 
-  if (gameState.value === 'cutscene' && !cutsceneFade.active) {
-    const entry = DIALOGUE[dialogueIndex];
+  if (isDialogueActive() && !cutsceneFade.active) {
+    const entry = dialogueScript[dialogueIndex];
     if (entry && dialogueChar < entry.text.length) {
       dialogueChar = Math.min(entry.text.length, dialogueChar + Math.ceil(dialogueSpeed * dt));
     }
@@ -1180,13 +1442,15 @@ const tick = (now) => {
     setScoreOpacity(1);
   }
 
-  const bossPhase = (gameState.value === 'cutscene' && showHealthBar);
-  const activePlay = (gameState.value === 'playing' || bossPhase);
+  const bossOutroActive = bossOutro.active;
+  const bossPhase = (gameState.value === 'cutscene' && showHealthBar && !bossOutroActive);
+  const activePlay = (gameState.value === 'playing' || bossPhase) && !bossOutroActive;
 
   if (gameState.value === 'playing' || gameState.value === 'cutscene') {
     const maxScroll = (gameState.value === 'cutscene') ? Infinity : finishStopX;
-    const move = Math.max(0, Math.min(WORLD.speed * dt, maxScroll - scrollX));
-    scrollX += move;
+    const move = bossOutroActive ? 0 : Math.max(0, Math.min(WORLD.speed * dt, maxScroll - scrollX));
+    if (bossOutroActive) scrollX = bossOutro.anchorScrollX;
+    else scrollX += move;
     if (inputHeld) {
       const heldMs = performance.now() - inputHeldAt;
       player.squashTarget = (heldMs > SQUASH.tapMs) ? SQUASH.y : 1;
@@ -1238,7 +1502,13 @@ const tick = (now) => {
       else blueT = 0.10;
     }
 
-    if (!player._beingEaten) {
+    if (bossOutroActive) {
+      player.x = bossOutro.anchorPlayerX;
+      player.y = bossOutro.anchorPlayerY;
+      player.vy = 0;
+      player.squashTarget = 1;
+      player.squashY = 1;
+    } else if (!player._beingEaten) {
       player.squashY = lerp(player.squashY, player.squashTarget, 1 - Math.pow(0.001, dt));
       player.vy += PHYS.gravity * dt;
       player.vy = clamp(player.vy, -2000, PHYS.maxFall);
@@ -1360,6 +1630,7 @@ const tick = (now) => {
         bossCheckpointHp = boss.hp;
         if (playEatBombSfx) playEatBombSfx();
         startLineBurstAt(x, y, Math.max(0.7, r / 18));
+        if (boss.hp <= 0) startBossOutro();
       },
       onPlayerDeath: () => { deathDelay = 0.45; },
       attackActive: () => attackFlashT > 0,
@@ -1393,7 +1664,18 @@ const tick = (now) => {
 
     if (gameState.value === 'cutscene') {
       boss.r = player.r;
-      boss.x = innerWidth - Math.max(60, boss.r * 1.2);
+
+      if (bossOutroActive) {
+        boss.x = bossOutro.anchorBossX;
+        boss.y = bossOutro.anchorBossY;
+        boss.vy = 0;
+        boss.duckT = 0;
+        boss.squashY = 1;
+        const wingSpeed = 4.2;
+        boss.wingT = (boss.wingT + dt * wingSpeed) % 1;
+      } else {
+        boss.x = innerWidth - Math.max(60, boss.r * 1.2);
+      }
 
       if (bossPhase) {
         const scrollSpeed = dt > 0 ? (move / dt) : 0;
@@ -1435,7 +1717,7 @@ const tick = (now) => {
         const grounded = (Math.abs(boss.y - floor) < 0.5) && Math.abs(boss.vy) < 1;
         const wingSpeed = grounded ? 4.6 : 6.2;
         boss.wingT = (boss.wingT + dt * wingSpeed) % 1;
-      } else {
+      } else if (!bossOutroActive) {
         boss.vy = 0;
         boss.duckT = 0;
         boss.squashY = lerp(boss.squashY, 1, 1 - Math.pow(0.001, dt));
@@ -1451,6 +1733,8 @@ const tick = (now) => {
         finishExit = false;
         cutscenePending = false;
         gameState.value = 'cutscene';
+        dialogueScript = DIALOGUE_INTRO;
+        dialogueMode = 'intro';
         dialogueIndex = 0;
         dialogueChar = 0;
         playTextTapSfx();
@@ -1534,21 +1818,33 @@ const draw = () => {
   const h = innerHeight;
   ctx.clearRect(0, 0, w, h);
 
-  drawSky(ctx, w, h);
+  const useBlackBackdrop = bossOutro.blackBackdrop || gameState.value === 'stageclear';
+  if (useBlackBackdrop) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    drawSky(ctx, w, h);
+    drawStars(ctx, starsFar, 0.05, scrollX, groundY(), w);
+    drawHills(ctx, w, groundY(), scrollX);
+  }
 
-  drawStars(ctx, starsFar, 0.05, scrollX, groundY(), w);
+  const shakeAmp = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode')) ? 6 : 0;
+  if (shakeAmp > 0) {
+    ctx.save();
+    ctx.translate(rand(-shakeAmp, shakeAmp), rand(-shakeAmp, shakeAmp));
+  }
 
-  drawHills(ctx, w, groundY(), scrollX);
+  if (gameState.value !== 'stageclear') {
+    drawGround(ctx, groundY(), w, h, scrollX);
+  }
 
-  drawGround(ctx, groundY(), w, h, scrollX);
-
-  const showEntities = !(gameState.value === 'start' || gameState.value === 'startTransition');
+  const showEntities = !(gameState.value === 'start' || gameState.value === 'startTransition' || gameState.value === 'stageclear');
   if (showEntities) {
     const fadeEntitiesAlpha = finishFadeEntities.active
       ? (1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)))
       : 1;
 
-    drawCheckpointFlags(ctx, w);
+    if (!bossOutro.blackBackdrop) drawCheckpointFlags(ctx, w);
 
     if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
     for (const o of reds) {
@@ -1574,8 +1870,11 @@ const draw = () => {
     if ((gameState.value === 'playing' || gameState.value === 'cutscene') && player.r > 0.3) {
       drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
     }
-    if (gameState.value === 'cutscene') {
-      drawPlayer2(ctx, boss.x, boss.y, boss.r, 0, boss.mouth, boss.squashY, BOSS_PALETTE, false, true, { t: boss.wingT });
+    if (gameState.value === 'cutscene' && !(bossOutro.active && bossOutro.bossGone)) {
+      const bossJitter = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode'))
+        ? { x: rand(-2, 2), y: rand(-2, 2) }
+        : { x: 0, y: 0 };
+      drawPlayer2(ctx, boss.x + bossJitter.x, boss.y + bossJitter.y, boss.r, 0, boss.mouth, boss.squashY, BOSS_PALETTE, false, true, { t: boss.wingT });
     }
 
     drawFloaters(ctx, floaters, clamp);
@@ -1585,7 +1884,12 @@ const draw = () => {
     if (npcShatter.active) drawShatter(ctx, npcShatter);
     drawSparkles(ctx, sparkles);
     if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
+    for (const b of bossExplosions) {
+      if (b.active) drawLineBurst(ctx, b, lerp);
+    }
   }
+
+  if (shakeAmp > 0) ctx.restore();
 
   if (!cinematicUiHidden) {
     const uiFade = finishFadeEntities.active
@@ -1620,7 +1924,7 @@ const draw = () => {
     }
   }
 
-  if (gameState.value === 'cutscene' && dialogueIndex < DIALOGUE.length) {
+  if (isDialogueActive() && dialogueIndex < dialogueScript.length) {
     drawDialogueBox(ctx, w, h);
   }
 
@@ -1712,8 +2016,26 @@ const draw = () => {
     drawScreenText(ctx, w, h, "DUCK'S SAKE", 'TAP TO START', '', getScreenAlpha());
   } else if (gameState.value === 'gameover' || gameState.value === 'restartTransition') {
     drawScreenText(ctx, w, h, 'GAME OVER', 'tap to try again', `${score} pts`, getScreenAlpha());
+  } else if (gameState.value === 'stageclear') {
+    drawScreenText(ctx, w, h, 'STAGE COMPLETE', 'tap to play again', `${score} pts`, 1);
   } else if (gameState.value === 'paused') {
     drawScreenText(ctx, w, h, 'PAUSE', 'PRESS P TO RESUME', '', 1);
+  }
+
+  if (bossOutro.blackAlpha > 0) {
+    ctx.save();
+    ctx.globalAlpha = bossOutro.blackAlpha;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  if (bossOutro.whiteAlpha > 0) {
+    ctx.save();
+    ctx.globalAlpha = bossOutro.whiteAlpha;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
   }
 
   if (cutsceneFade.active) {
@@ -1729,7 +2051,7 @@ const draw = () => {
 };
 
 const drawDialogueBox = (ctx, w, h) => {
-  const entry = DIALOGUE[dialogueIndex];
+  const entry = dialogueScript[dialogueIndex];
   if (!entry) return;
 
   const paddingX = 18;
