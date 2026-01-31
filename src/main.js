@@ -594,6 +594,7 @@ const lockBossOutroScene = () => {
   player.squashTarget = 1;
   player.squashY = 1;
   player.y = groundY() - player.r;
+  player.mouth.dir = Math.atan2(boss.y - player.y, boss.x - player.x);
 
   boss.r = player.baseR;
   boss.x = innerWidth - Math.max(60, boss.r * 1.2);
@@ -1894,19 +1895,21 @@ const tick = (now) => {
       }
     }
 
-    let best = null, bestD = Infinity;
-    for (const n of npcs) {
-      if (n.state !== 'fly') continue;
-      if (n.x < player.x - 10) continue;
-      const d = dist(player.x, player.y, n.x, n.y);
-      if (d < bestD) { bestD = d; best = n; }
-    }
-    const targetAngle = best ? Math.atan2(best.y - player.y, best.x - player.x) : 0;
-    if (biteT > 0) {
-      biteT = Math.max(0, biteT - dt);
-      player.mouth.dir = lerpAngle(player.mouth.dir, biteDir, 1 - Math.pow(0.000001, dt));
-    } else {
-      player.mouth.dir = lerpAngle(player.mouth.dir, targetAngle, 1 - Math.pow(0.001, dt));
+    if (!bossOutroPoseLocked) {
+      let best = null, bestD = Infinity;
+      for (const n of npcs) {
+        if (n.state !== 'fly') continue;
+        if (n.x < player.x - 10) continue;
+        const d = dist(player.x, player.y, n.x, n.y);
+        if (d < bestD) { bestD = d; best = n; }
+      }
+      const targetAngle = best ? Math.atan2(best.y - player.y, best.x - player.x) : 0;
+      if (biteT > 0) {
+        biteT = Math.max(0, biteT - dt);
+        player.mouth.dir = lerpAngle(player.mouth.dir, biteDir, 1 - Math.pow(0.000001, dt));
+      } else {
+        player.mouth.dir = lerpAngle(player.mouth.dir, targetAngle, 1 - Math.pow(0.001, dt));
+      }
     }
   } else if (gameState.value === 'start' || gameState.value === 'startTransition') {
     scrollX += WORLD.speed * dt;
