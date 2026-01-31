@@ -102,12 +102,24 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
             n.emotion = 'fear';
             triggerChomp(player.mouth, deps.MOUTH);
             if (deps.onBite) deps.onBite(n.x, n.y);
-          } else if (npcCanEat) {
+        } else if (npcCanEat) {
           n.state = 'eatingPlayer';
           n.t = 0;
           n.emotion = 'hungry';
           triggerChomp(n.mouth, deps.MOUTH);
-          player._beingEaten = { t: 0, x0: player.x, y0: player.y, r0: player.r, tx: n.x, ty: n.y };
+          const { angle, flipX } = resolveFacing(n.mouth.dir);
+          const mouthX = (flipX ? -1 : 1) * n.r * 0.40;
+          const mouthY = n.r * 0.10;
+          player._beingEaten = {
+            t: 0,
+            x0: player.x,
+            y0: player.y,
+            r0: player.r,
+            eater: n,
+            offX: mouthX,
+            offY: mouthY,
+            inset: Math.min(player.r * 0.35, n.r * 0.45),
+          };
         }
       }
     } else if (n.state === 'beingEaten') {

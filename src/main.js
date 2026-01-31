@@ -2042,8 +2042,24 @@ const tick = (now) => {
     if (player._beingEaten) {
       player._beingEaten.t = clamp(player._beingEaten.t + dt / EAT.swallowDur, 0, 1);
       const tt = easeInOut(player._beingEaten.t);
-      player.x = lerp(player._beingEaten.x0, player._beingEaten.tx, tt);
-      player.y = lerp(player._beingEaten.y0, player._beingEaten.ty, tt);
+      if (player._beingEaten.eater) {
+        const eater = player._beingEaten.eater;
+        const dir = eater.mouth?.dir ?? 0;
+        const flipX = Math.cos(dir) < 0;
+        const angle = flipX ? (Math.PI - dir) : dir;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const inset = player._beingEaten.inset || 0;
+        const offX = (flipX ? -1 : 1) * (player._beingEaten.offX + inset);
+        const offY = player._beingEaten.offY;
+        const tx = eater.x + offX * cos - offY * sin;
+        const ty = eater.y + offX * sin + offY * cos;
+        player.x = lerp(player._beingEaten.x0, tx, tt);
+        player.y = lerp(player._beingEaten.y0, ty, tt);
+      } else {
+        player.x = lerp(player._beingEaten.x0, player._beingEaten.tx, tt);
+        player.y = lerp(player._beingEaten.y0, player._beingEaten.ty, tt);
+      }
       player.r = lerp(player._beingEaten.r0, 0, tt);
       if (player._beingEaten.t >= 1) {
         player.alive = false;
@@ -2172,6 +2188,10 @@ const draw = () => {
 
       drawDustPuffs(ctx, dustPuffs, lerp);
 
+      if (showPlayer && (gameState.value === 'playing' || gameState.value === 'cutscene') && player.r > 0.3 && player._beingEaten) {
+        drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
+      }
+
       if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
       for (const n of npcs) {
         drawCharacter(ctx, n.x, n.y, n.r, n.mouth.dir, n.mouth.open, n.emotion, 1, clamp, lerp);
@@ -2180,7 +2200,7 @@ const draw = () => {
 
     }
 
-    if (showPlayer && (gameState.value === 'playing' || gameState.value === 'cutscene') && player.r > 0.3) {
+    if (showPlayer && (gameState.value === 'playing' || gameState.value === 'cutscene') && player.r > 0.3 && !player._beingEaten) {
       drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
     }
 
