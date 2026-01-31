@@ -2179,6 +2179,7 @@ const draw = () => {
     drawScreenText(ctx, w, h, 'STAGE COMPLETE', 'tap to play again', `${score} pts`, 1);
   } else if (gameState.value === 'paused') {
     drawScreenText(ctx, w, h, 'PAUSE', 'PRESS P TO RESUME', '', 1);
+    drawPauseDebugKeys(ctx, w, h);
   }
 
   if (bossOutro.blackAlpha > 0) {
@@ -2271,6 +2272,30 @@ const drawDialogueBox = (ctx, w, h) => {
     ctx.fillText(lines[i], (w - lw) * 0.5, textY);
   }
 
+  ctx.restore();
+};
+
+const drawPauseDebugKeys = (ctx, w, h) => {
+  const lines = [
+    'H: debug HUD',
+    'B: boss outro',
+    'R: reset to start',
+    'ENTER: warp near finish',
+  ];
+  const lineH = 16;
+  const startY = (h / 2) + 86;
+  ctx.save();
+  ctx.font = '13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(242, 244, 247, 0.9)';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.lineWidth = 3;
+  for (let i = 0; i < lines.length; i++) {
+    const y = startY + i * lineH;
+    ctx.strokeText(lines[i], w / 2, y);
+    ctx.fillText(lines[i], w / 2, y);
+  }
   ctx.restore();
 };
 
