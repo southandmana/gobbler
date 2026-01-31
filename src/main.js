@@ -20,7 +20,7 @@ scoreLockEl.className = 'score-lock';
 scoreLockEl.setAttribute('aria-hidden', 'true');
 scoreEl.appendChild(scoreLockEl);
 
-const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | restartTransition | cutscene | stageclear
+const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | gameoverFinal | restartTransition | cutscene | stageclear
 
 const BOSS_PALETTE = {
   body: '#d35a5a',
@@ -322,6 +322,7 @@ let scrollX = 0;
 
 const screenAnim = { active: false, t: 0, dur: 0.45 };
 const cutsceneFade = { active: false, phase: 'out', t: 0, dur: 0.7 };
+const gameOverFinal = { active: false, t: 0, dur: 1.4 };
 
 const LEVEL = { length: 20000, checkpoints: [0, 0.25, 0.5, 0.75, 1] };
 const checkpointXs = LEVEL.checkpoints.map((f) => f * LEVEL.length);
@@ -501,6 +502,8 @@ const beginStartScreen = () => {
   gameState.value = 'start';
   menuScrollX = scrollX;
   showScore(false);
+  gameOverFinal.active = false;
+  gameOverFinal.t = 0;
   levelMusic.pending = false;
   levelMusic.delay = 0;
   levelMusic.fade = 0;
@@ -590,6 +593,21 @@ const beginGameOver = () => {
   screenAnim.active = true;
   screenAnim.t = 0;
   screenAnim.dur = 0.45;
+  gameOverFinal.active = false;
+  gameOverFinal.t = 0;
+};
+
+const startGameOverFinal = () => {
+  gameState.value = 'gameoverFinal';
+  gameOverFinal.active = true;
+  gameOverFinal.t = 0;
+};
+
+const continueFromGameOver = () => {
+  livesHalf = MAX_LIVES_HALF;
+  screenAnim.active = false;
+  gameOverFinal.active = false;
+  respawnAtCheckpoint();
 };
 
 const beginStageClear = () => {
@@ -1419,7 +1437,6 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
     if (gameState.value === 'start') startStartTransition();
     else if (gameState.value === 'stageclear') startRestartTransition();
-    else if (gameState.value === 'gameover') startRestartTransition();
     else if (!finishExit) inputPress();
   }
   if (e.code === 'Enter') {
@@ -1440,10 +1457,21 @@ const toCanvasXY = (ev) => {
 };
 
 addEventListener('pointerdown', (ev) => {
-  toCanvasXY(ev);
+  const { x, y } = toCanvasXY(ev);
   if (gameState.value === 'start') { startStartTransition(); return; }
   if (gameState.value === 'stageclear') { startRestartTransition(); return; }
-  if (gameState.value === 'gameover') { startRestartTransition(); return; }
+  if (gameState.value === 'gameover') {
+    const buttons = getGameOverButtons(innerWidth, innerHeight);
+    for (const b of buttons) {
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+        if (b.id === 'yes') continueFromGameOver();
+        else startGameOverFinal();
+        return;
+      }
+    }
+    return;
+  }
+  if (gameState.value === 'gameoverFinal') return;
   if (isDialogueActive()) { advanceDialogue(); return; }
   if (gameState.value === 'startTransition' || gameState.value === 'restartTransition' || gameState.value === 'dying' || cutscenePending) return;
   inputPress();
@@ -1971,7 +1999,7 @@ const tick = (now) => {
     }
   } else if (gameState.value === 'start' || gameState.value === 'startTransition') {
     menuScrollX += WORLD.speed * dt;
-  } else if (gameState.value !== 'dying' && gameState.value !== 'gameover') {
+  } else if (gameState.value !== 'dying' && gameState.value !== 'gameover' && gameState.value !== 'gameoverFinal') {
     const move = WORLD.speed * dt;
     driftNPCs(npcs, move);
     driftReds(reds, move);
@@ -1984,6 +2012,14 @@ const tick = (now) => {
     if (!burst.active && deathDelay <= 0) {
       if (livesHalf <= 0) beginGameOver();
       else respawnAtCheckpoint();
+    }
+  }
+
+  if (gameState.value === 'gameoverFinal' && gameOverFinal.active) {
+    gameOverFinal.t = Math.min(gameOverFinal.dur, gameOverFinal.t + dt);
+    if (gameOverFinal.t >= gameOverFinal.dur) {
+      gameOverFinal.active = false;
+      beginStartScreen();
     }
   }
 
@@ -2002,7 +2038,7 @@ const draw = () => {
   const showWorldEntities = !bossOutro.blackBackdrop;
   const showPlayer = showWorldEntities || bossOutro.active;
 
-  const useBlackBackdrop = bossOutro.blackBackdrop || gameState.value === 'stageclear';
+  const useBlackBackdrop = bossOutro.blackBackdrop || gameState.value === 'stageclear' || gameState.value === 'gameoverFinal';
   const bgScrollX = (gameState.value === 'start' || gameState.value === 'startTransition')
     ? menuScrollX
     : scrollX + menuScrollX;
@@ -2022,11 +2058,11 @@ const draw = () => {
     ctx.translate(rand(-shakeAmp, shakeAmp), rand(-shakeAmp, shakeAmp));
   }
 
-  if (gameState.value !== 'stageclear') {
+  if (gameState.value !== 'stageclear' && gameState.value !== 'gameoverFinal') {
     drawGround(ctx, groundY(), w, h, bgScrollX);
   }
 
-  const showEntities = !(gameState.value === 'start' || gameState.value === 'startTransition' || gameState.value === 'stageclear');
+  const showEntities = !(gameState.value === 'start' || gameState.value === 'startTransition' || gameState.value === 'stageclear' || gameState.value === 'gameoverFinal');
   if (showEntities) {
     const fadeEntitiesAlpha = finishFadeEntities.active
       ? (1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)))
@@ -2226,8 +2262,12 @@ const draw = () => {
 
   if (gameState.value === 'start' || gameState.value === 'startTransition') {
     drawScreenText(ctx, w, h, "DUCK'S SAKE", 'TAP TO START', '', getScreenAlpha());
-  } else if (gameState.value === 'gameover' || gameState.value === 'restartTransition') {
-    drawScreenText(ctx, w, h, 'GAME OVER', 'tap to try again', `${score} pts`, getScreenAlpha());
+  } else if (gameState.value === 'gameover') {
+    drawGameOverChoice(ctx, w, h);
+  } else if (gameState.value === 'gameoverFinal') {
+    drawGameOverFinal(ctx, w, h);
+  } else if (gameState.value === 'restartTransition') {
+    drawScreenText(ctx, w, h, 'GAME OVER', '', `${score} pts`, getScreenAlpha());
   } else if (gameState.value === 'stageclear') {
     drawScreenText(ctx, w, h, 'STAGE COMPLETE', '', '', 1);
     drawStageCompleteStats(ctx, w, h);
@@ -2480,6 +2520,55 @@ const drawHealthBar = (ctx) => {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#f2f4f7';
   ctx.fillText('RED', x + labelW * 0.5, y + h * 0.55);
+  ctx.restore();
+};
+
+const getGameOverButtons = (w, h) => {
+  const btnW = Math.min(240, w * 0.36);
+  const btnH = 44;
+  const gap = Math.min(30, w * 0.06);
+  const totalW = btnW * 2 + gap;
+  const x0 = (w - totalW) * 0.5;
+  const y = h * 0.58;
+  return [
+    { id: 'yes', label: 'DUCK YEAH!', x: x0, y, w: btnW, h: btnH },
+    { id: 'no', label: 'DUCK NO!', x: x0 + btnW + gap, y, w: btnW, h: btnH },
+  ];
+};
+
+const drawGameOverChoice = (ctx, w, h) => {
+  const cx = w * 0.5;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#f2f4f7';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.lineWidth = 6;
+  ctx.font = '800 52px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.strokeText('TRY AGAIN?', cx, h * 0.4);
+  ctx.fillText('TRY AGAIN?', cx, h * 0.4);
+
+  ctx.font = '700 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  ctx.lineWidth = 3;
+  const buttons = getGameOverButtons(w, h);
+  for (const b of buttons) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.strokeStyle = 'rgba(242, 244, 247, 0.7)';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle = '#f2f4f7';
+    ctx.fillText(b.label, b.x + b.w * 0.5, b.y + b.h * 0.56);
+  }
+  ctx.restore();
+};
+
+const drawGameOverFinal = (ctx, w, h) => {
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#e44c4c';
+  ctx.font = '800 54px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText('GAME OVER', w * 0.5, h * 0.5);
   ctx.restore();
 };
 
