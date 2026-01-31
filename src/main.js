@@ -2484,9 +2484,9 @@ const drawHeartPath = (ctx, x, y, size) => {
 };
 
 const drawHeart = (ctx, x, y, size, fill) => {
-  const emptyFill = 'rgba(0, 0, 0, 0.35)';
-  const fillColor = DEFAULT_PALETTE.body;
-  const outline = 'rgba(0, 0, 0, 0.6)';
+  const emptyFill = '#6f3a3d';
+  const fillColor = NPC_PALETTE.lips;
+  const outline = '#b36366';
   const lineW = Math.max(1.2, size * 0.08);
 
   ctx.save();
