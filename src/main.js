@@ -1034,6 +1034,8 @@ const updateBossOutro = (dt) => {
     if (bossOutro.t >= bossOutro.whiteHold) {
       bossOutro.phase = 'white_out';
       bossOutro.t = 0;
+      bossOutro.blackBackdrop = true;
+      bossOutro.anchorScrollX = scrollX;
     }
   } else if (bossOutro.phase === 'white_out') {
     const tt = clamp(bossOutro.t / Math.max(0.001, bossOutro.whiteOut), 0, 1);
@@ -1046,7 +1048,6 @@ const updateBossOutro = (dt) => {
       bossOutro.blackAlpha = 0;
       bossOutro.boomSpawn = 0;
       bossOutro.boomSfx = 0;
-      bossOutro.anchorScrollX = scrollX;
       clearBossOutroWorld();
     }
   } else if (bossOutro.phase === 'boom') {
