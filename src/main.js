@@ -576,6 +576,7 @@ const awardBossBonus = () => {
 
 const beginBossOutro = () => {
   if (bossOutro.active) return;
+  bossScoreLocked = true;
   gameState.value = 'cutscene';
   cutscenePending = false;
   cutsceneFade.active = false;
@@ -1684,6 +1685,7 @@ const tick = (now) => {
       }
     }
 
+    const outroMuteSfx = bossOutroInvulnerable;
     if (!finishExit && !cutscenePending && activePlay) updateNPCs(npcs, player, dt, move, {
       groundY,
       EAT,
@@ -1693,7 +1695,7 @@ const tick = (now) => {
       addScore,
       deductScore,
       popText: (txt, x, y) => popText(floaters, txt, x, y),
-      playEatNpcSfx,
+      playEatNpcSfx: outroMuteSfx ? null : playEatNpcSfx,
       triggerChomp,
       updateMouth,
       clamp,
@@ -1722,10 +1724,10 @@ const tick = (now) => {
       startLineBurst: startLineBurstAt,
       startHeadShatter: startHeadShatterAt,
       startNpcShatter: startNpcShatterAt,
-      playBombLeavesSfx,
-      playBombHitsGroundSfx,
-      playEatBombSfx,
-      playHitBombSfx,
+      playBombLeavesSfx: outroMuteSfx ? null : playBombLeavesSfx,
+      playBombHitsGroundSfx: outroMuteSfx ? null : playBombHitsGroundSfx,
+      playEatBombSfx: outroMuteSfx ? null : playEatBombSfx,
+      playHitBombSfx: outroMuteSfx ? null : playHitBombSfx,
       state: gameState,
       playerInvulnerable: bossOutroInvulnerable,
       showScore,
@@ -1764,7 +1766,7 @@ const tick = (now) => {
       lerp,
       dist,
       popText: (txt, x, y) => popText(floaters, txt, x, y),
-      playEatStarSfx,
+      playEatStarSfx: outroMuteSfx ? null : playEatStarSfx,
       groundY,
       onShrink: (x, y, r) => startSparkles(sparkles, x, y, r, rand, 12),
       onBite: (x, y) => {
