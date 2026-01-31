@@ -2105,9 +2105,7 @@ const draw = () => {
     if (showBossUi) {
       if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
       drawHealthBar(ctx);
-      const showTimer = bossScoreLocked && !bossOutroLocked && !cinematicUiHidden;
-      if (showTimer) drawBossTimer();
-      else setBossTimerVisible(false);
+      setBossTimerVisible(false);
       if (uiFade < 1) ctx.restore();
     } else {
       setBossTimerVisible(false);
