@@ -326,7 +326,7 @@ const gameOverFinal = { active: false, t: 0, dur: 1.4 };
 const COINS_MAX = 5;
 let coins = COINS_MAX;
 const coinFlash = { active: false, t: 0, dur: 1.5 };
-const insertFlash = { active: false, t: 0, dur: 0.35 };
+let insertMode = false;
 const resumeDelay = { active: false, t: 0, dur: 1.5 };
 
 const LEVEL = { length: 20000, checkpoints: [0, 0.25, 0.5, 0.75, 1] };
@@ -509,6 +509,7 @@ const beginStartScreen = () => {
   showScore(false);
   gameOverFinal.active = false;
   gameOverFinal.t = 0;
+  insertMode = false;
   levelMusic.pending = false;
   levelMusic.delay = 0;
   levelMusic.fade = 0;
@@ -604,13 +605,7 @@ const beginGameOver = () => {
   coinFlash.t = 0;
   resumeDelay.active = false;
   resumeDelay.t = 0;
-  insertFlash.active = false;
-  insertFlash.t = 0;
-  if (coins <= 0) {
-    coins = COINS_MAX;
-    insertFlash.active = true;
-    insertFlash.t = 0;
-  }
+  insertMode = coins <= 0;
 };
 
 const startGameOverFinal = () => {
@@ -630,6 +625,11 @@ const finishContinueFromGameOver = () => {
 
 const continueFromGameOver = () => {
   if (resumeDelay.active) return;
+  if (insertMode) {
+    coins = COINS_MAX;
+    insertMode = false;
+    return;
+  }
   coins = Math.max(0, coins - 1);
   coinFlash.active = true;
   coinFlash.t = 0;
@@ -2048,10 +2048,6 @@ const tick = (now) => {
       coinFlash.t = Math.min(coinFlash.dur, coinFlash.t + dt);
       if (coinFlash.t >= coinFlash.dur) coinFlash.active = false;
     }
-    if (insertFlash.active) {
-      insertFlash.t = Math.min(insertFlash.dur, insertFlash.t + dt);
-      if (insertFlash.t >= insertFlash.dur) insertFlash.active = false;
-    }
     if (resumeDelay.active) {
       resumeDelay.t = Math.min(resumeDelay.dur, resumeDelay.t + dt);
       if (resumeDelay.t >= resumeDelay.dur) {
@@ -2589,18 +2585,19 @@ const drawGameOverChoice = (ctx, w, h) => {
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
   ctx.lineWidth = 6;
   ctx.font = '800 52px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-  ctx.strokeText('TRY AGAIN?', cx, h * 0.4);
-  ctx.fillText('TRY AGAIN?', cx, h * 0.4);
+  ctx.strokeText('CONTINUE?', cx, h * 0.4);
+  ctx.fillText('CONTINUE?', cx, h * 0.4);
 
   ctx.lineWidth = 3;
   const buttons = getGameOverButtons(w, h);
-  const yesLabel = insertFlash.active ? `INSERT COINS (${COINS_MAX})` : 'DUCK YEAH!';
+  const yesLabel = insertMode ? `INSERT COINS (${COINS_MAX})` : 'DUCK YEAH!';
   for (const b of buttons) {
-    ctx.fillStyle = '#000';
+    const isInsert = (b.id === 'yes' && insertMode);
+    ctx.fillStyle = isInsert ? '#f2d36a' : '#000';
     ctx.strokeStyle = 'rgba(242, 244, 247, 0.9)';
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.strokeRect(b.x, b.y, b.w, b.h);
-    ctx.fillStyle = '#f2f4f7';
+    ctx.fillStyle = isInsert ? '#2f3c14' : '#f2f4f7';
     const label = (b.id === 'yes') ? yesLabel : b.label;
     let fontSize = 16;
     ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
@@ -2618,8 +2615,9 @@ const drawGameOverChoice = (ctx, w, h) => {
     coinsAlpha = blinkOn ? 1 : 0;
   }
   ctx.globalAlpha = coinsAlpha;
-  ctx.fillStyle = '#f2d36a';
-  ctx.strokeStyle = '#b7892a';
+  const coinsEmpty = coins <= 0;
+  ctx.fillStyle = coinsEmpty ? '#e44c4c' : '#f2d36a';
+  ctx.strokeStyle = coinsEmpty ? '#8e2a2a' : '#b7892a';
   ctx.lineWidth = 3;
   ctx.font = '700 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
   const coinsY = buttons[0].y + buttons[0].h + 26;
