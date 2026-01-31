@@ -1741,9 +1741,10 @@ const tick = (now) => {
         bossCheckpointX = scrollX;
         bossCheckpointHp = boss.hp;
         bossCheckpointTimer = bossTimer;
-        if (playEatBombSfx) playEatBombSfx();
+        const isFinalHit = boss.hp <= 0;
+        if (!isFinalHit && playEatBombSfx) playEatBombSfx();
         startLineBurstAt(x, y, Math.max(0.7, r / 18));
-        if (boss.hp <= 0) beginBossOutro();
+        if (isFinalHit) beginBossOutro();
       },
       onPlayerDeath: () => { deathDelay = 0.45; },
       attackActive: () => attackFlashT > 0,
