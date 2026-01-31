@@ -29,6 +29,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
     bossActive,
     onBossHit,
     onPlayerDeath,
+    onNpcKilled,
     playerInvulnerable,
   } = deps;
   const isPlayerInvulnerable = !!playerInvulnerable;
@@ -83,6 +84,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
           const d = deps.dist(o.x, o.y, n.x, n.y);
           if (d <= (o.r + n.r)) {
             npcs.splice(j, 1);
+            if (onNpcKilled) onNpcKilled(n);
             if (playEatBombSfx) playEatBombSfx();
             if (startLineBurst) startLineBurst(n.x, n.y, Math.max(0.7, o.r / 18));
             if (startNpcShatter) startNpcShatter(n.x, n.y, n.r);

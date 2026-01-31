@@ -54,6 +54,8 @@ let bossTimerActive = false;
 let bossBonusAwarded = false;
 let bossDifficulty = 0;
 let bossDifficultyActive = false;
+let deathCount = 0;
+let enemiesKilled = 0;
 const bossOutro = {
   active: false,
   phase: 'idle',
@@ -183,9 +185,11 @@ const resetHudTrack = () => {
 let missLog = [];
 let missCount = 0;
 let missPoints = 0;
-const logMiss = (pts, x, y) => {
-  missLog.unshift({ pts, x, y, t: 0 });
-  if (missLog.length > 6) missLog.pop();
+const logMiss = (pts, x, y, record = true) => {
+  if (record) {
+    missLog.unshift({ pts, x, y, t: 0 });
+    if (missLog.length > 6) missLog.pop();
+  }
   missCount += 1;
   missPoints += pts;
 };
@@ -205,7 +209,12 @@ const deductScore = (pts, x, y) => {
   setScore(score - pts);
   popText(floaters, `-${pts}`, x, y);
   stress = clamp(stress + DDA.bumpOnMiss, 0, 1);
-  if (debugHUD) logMiss(pts, x, y);
+  logMiss(pts, x, y, debugHUD);
+};
+
+const registerDeath = () => {
+  if (gameState.value === 'dying') return;
+  deathCount += 1;
 };
 
 const scoreDifficulty01 = () => clamp(score / 120, 0, 1);
@@ -444,6 +453,8 @@ const resetGameVars = () => {
   bossBonusAwarded = false;
   bossDifficulty = 0;
   bossDifficultyActive = false;
+  deathCount = 0;
+  enemiesKilled = 0;
   finishExit = false;
   finishFadeEntities.active = false;
   finishFadeEntities.t = 0;
@@ -534,6 +545,8 @@ const beginStartScreen = () => {
   bossBonusAwarded = false;
   bossDifficulty = 0;
   bossDifficultyActive = false;
+  deathCount = 0;
+  enemiesKilled = 0;
   bossOutro.active = false;
   bossOutro.phase = 'idle';
   bossOutro.t = 0;
@@ -1696,6 +1709,7 @@ const tick = (now) => {
         player.alive = false;
         playPlayerOutsideSfx();
         startBurstAt(player.x, 0, 0.55);
+        registerDeath();
         gameState.value = 'dying';
       }
     }
@@ -1711,6 +1725,7 @@ const tick = (now) => {
       deductScore,
       popText: (txt, x, y) => popText(floaters, txt, x, y),
       playEatNpcSfx: outroMuteSfx ? null : playEatNpcSfx,
+      onNpcEaten: () => { enemiesKilled += 1; },
       triggerChomp,
       updateMouth,
       clamp,
@@ -1763,7 +1778,11 @@ const tick = (now) => {
         startLineBurstAt(x, y, Math.max(0.7, r / 18));
         if (isFinalHit) beginBossOutro();
       },
-      onPlayerDeath: () => { deathDelay = 0.45; },
+      onPlayerDeath: () => {
+        registerDeath();
+        deathDelay = 0.45;
+      },
+      onNpcKilled: () => { enemiesKilled += 1; },
       attackActive: () => attackFlashT > 0,
       onBite: (x, y) => {
         biteDir = Math.atan2(y - player.y, x - player.x);
@@ -1907,6 +1926,7 @@ const tick = (now) => {
       if (player._beingEaten.t >= 1) {
         player.alive = false;
         playNpcEatsPlayerSfx();
+        registerDeath();
         deathDelay = 0.45;
         gameState.value = 'dying';
         player._beingEaten = null;
@@ -2175,7 +2195,8 @@ const draw = () => {
   } else if (gameState.value === 'gameover' || gameState.value === 'restartTransition') {
     drawScreenText(ctx, w, h, 'GAME OVER', 'tap to try again', `${score} pts`, getScreenAlpha());
   } else if (gameState.value === 'stageclear') {
-    drawScreenText(ctx, w, h, 'STAGE COMPLETE', 'tap to play again', `${score} pts`, 1);
+    drawScreenText(ctx, w, h, 'STAGE COMPLETE', '', '', 1);
+    drawStageCompleteStats(ctx, w, h);
   } else if (gameState.value === 'paused') {
     drawScreenText(ctx, w, h, 'PAUSE', 'PRESS P TO RESUME', '', 1);
     drawPauseDebugKeys(ctx, w, h);
@@ -2294,6 +2315,44 @@ const drawPauseDebugKeys = (ctx, w, h) => {
     const y = startY + i * lineH;
     ctx.strokeText(lines[i], w / 2, y);
     ctx.fillText(lines[i], w / 2, y);
+  }
+  ctx.restore();
+};
+
+const drawStageCompleteStats = (ctx, w, h) => {
+  const mins = Math.floor(bossTimer / 60);
+  const secs = Math.floor(bossTimer % 60);
+  const timeText = `00:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const lines = [
+    { label: 'Points:', value: `${score}` },
+    { label: 'Deaths:', value: `${deathCount}` },
+    { label: 'Enemies Killed:', value: `${enemiesKilled}` },
+    { label: 'Enemies Missed:', value: `${missCount}` },
+    { label: 'Boss Kill Duration:', value: timeText },
+  ];
+  const lineH = 22;
+  const startY = (h / 2) + 70;
+  const leftX = w * 0.28;
+  const rightX = w * 0.78;
+  ctx.save();
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(242, 244, 247, 0.95)';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.lineWidth = 4;
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 2;
+  ctx.font = '600 20px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  for (let i = 0; i < lines.length; i++) {
+    const y = startY + i * lineH;
+    const line = lines[i];
+    ctx.textAlign = 'left';
+    ctx.strokeText(line.label, leftX, y);
+    ctx.fillText(line.label, leftX, y);
+    ctx.textAlign = 'right';
+    ctx.strokeText(line.value, rightX, y);
+    ctx.fillText(line.value, rightX, y);
   }
   ctx.restore();
 };

@@ -120,6 +120,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
       if (n.t >= 1) {
         npcs.splice(i, 1);
         if (playEatNpcSfx) playEatNpcSfx();
+        if (deps.onNpcEaten) deps.onNpcEaten(n);
         addScore(n.pts, player.x, player.y - player.r - 10);
         const grow = GROW.baseStep + GROW.fromRadius(n.r0);
         player.r = clamp(player.r + grow, player.baseR, player.maxR);
