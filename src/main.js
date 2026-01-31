@@ -588,7 +588,7 @@ const beginBossOutro = () => {
   if (bossOutro.active) return;
   bossScoreLocked = true;
   if (!bossDifficultyActive) {
-    bossDifficulty = clamp(scoreDifficulty01(), 0.35, 1);
+    bossDifficulty = 1;
     bossDifficultyActive = true;
   }
   gameState.value = 'cutscene';
@@ -992,7 +992,7 @@ const advanceDialogue = () => {
   bossCheckpointTimer = 0;
   bossTimerActive = true;
   bossBonusAwarded = false;
-  bossDifficulty = clamp(scoreDifficulty01(), 0.35, 1);
+  bossDifficulty = 1;
   bossDifficultyActive = true;
   boss.hp = boss.hpMax;
   boss.vy = 0;
