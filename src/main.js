@@ -589,12 +589,15 @@ const beginStageClear = () => {
 const awardBossBonus = () => {
   if (bossBonusAwarded) return;
   bossBonusAwarded = true;
-  const t = bossTimer;
-  let bonus = 0;
-  if (t <= 120) bonus = 1000;
-  else if (t <= 240) bonus = 500;
-  else if (t <= 360) bonus = 250;
+  const bonus = getBossBonusForTime(bossTimer);
   if (bonus > 0) setScore(score + bonus);
+};
+
+const getBossBonusForTime = (t) => {
+  if (t <= 120) return 1000;
+  if (t <= 240) return 500;
+  if (t <= 360) return 250;
+  return 0;
 };
 
 const beginBossOutro = () => {
@@ -2322,12 +2325,14 @@ const drawPauseDebugKeys = (ctx, w, h) => {
 const drawStageCompleteStats = (ctx, w, h) => {
   const mins = Math.floor(bossTimer / 60);
   const secs = Math.floor(bossTimer % 60);
+  const bossBonus = getBossBonusForTime(bossTimer);
   const timeText = `00:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   const lines = [
-    { label: 'Points:', value: `${score}` },
+    { label: 'Total Score:', value: `${score} pts` },
     { label: 'Deaths:', value: `${deathCount}` },
     { label: 'Enemies Killed:', value: `${enemiesKilled}` },
     { label: 'Enemies Missed:', value: `${missCount}` },
+    { label: 'Boss Kill Bonus:', value: `${bossBonus} pts` },
     { label: 'Boss Kill Duration:', value: timeText },
   ];
   const lineH = 22;
