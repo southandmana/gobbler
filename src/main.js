@@ -574,6 +574,20 @@ const awardBossBonus = () => {
   if (bonus > 0) setScore(score + bonus);
 };
 
+const beginBossOutro = () => {
+  if (bossOutro.active) return;
+  gameState.value = 'cutscene';
+  cutscenePending = false;
+  cutsceneFade.active = false;
+  cutsceneFade.t = 0;
+  cutsceneFade.phase = 'out';
+  finishExit = false;
+  finishFadeEntities.active = false;
+  finishFadeEntities.t = 0;
+  showHealthBar = true;
+  startBossOutro();
+};
+
 const lockBossOutroScene = () => {
   bossOutro.blackBackdrop = true;
 
@@ -680,42 +694,8 @@ const startBossFinale = () => {
 
 const triggerBossOutroSkip = () => {
   if (bossOutro.active) return;
-  gameState.value = 'cutscene';
-  cutscenePending = false;
-  cutsceneFade.active = false;
-  cutsceneFade.t = 0;
-  cutsceneFade.phase = 'out';
-  finishExit = false;
-  finishFadeEntities.active = false;
-  finishFadeEntities.t = 0;
-
-  npcs.length = 0;
-  reds.length = 0;
-  blues.length = 0;
-  npcT = 999;
-  redT = 999;
-  blueT = 999;
-  trail = null;
-
-  scrollX = finishStopX + innerWidth + 40;
-  player.x = 160;
-  player.r = player.baseR;
-  player.vy = 0;
-  player.squashTarget = 1;
-  player.squashY = 1;
-  player.y = groundY() - player.r;
-  player.emotion = 'neutral';
-
-  boss.r = player.r;
-  boss.x = innerWidth - Math.max(60, boss.r * 1.2);
-  boss.y = groundY() - boss.r;
-  boss.vy = 0;
-  boss.duckT = 0;
-  boss.squashY = 1;
   boss.hp = 0;
-
-  showHealthBar = true;
-  startBossOutro();
+  beginBossOutro();
 };
 
 const respawnAtCheckpoint = () => {
@@ -1567,6 +1547,7 @@ const tick = (now) => {
 
   const bossOutroActive = bossOutro.active;
   const bossOutroLocked = bossOutroActive && bossOutro.blackBackdrop;
+  const bossOutroInvulnerable = bossOutroActive && !bossOutroLocked;
   const bossPhase = (gameState.value === 'cutscene' && showHealthBar && !bossOutroLocked);
   const activePlay = (gameState.value === 'playing' || bossPhase) && !bossOutroLocked;
 
@@ -1691,7 +1672,7 @@ const tick = (now) => {
       }
       wasGrounded = grounded;
 
-      if (player.y + (player.r * player.squashY) < 0) {
+      if (!bossOutroInvulnerable && player.y + (player.r * player.squashY) < 0) {
         player.alive = false;
         playPlayerOutsideSfx();
         startBurstAt(player.x, 0, 0.55);
@@ -1716,6 +1697,7 @@ const tick = (now) => {
       easeInOut,
       lerpAngle,
       dist,
+      playerInvulnerable: bossOutroInvulnerable,
       onBite: (x, y) => {
         biteDir = Math.atan2(y - player.y, x - player.x);
         biteT = 0.12;
@@ -1741,6 +1723,7 @@ const tick = (now) => {
       playEatBombSfx,
       playHitBombSfx,
       state: gameState,
+      playerInvulnerable: bossOutroInvulnerable,
       showScore,
       groundY,
       npcs,
@@ -1756,7 +1739,7 @@ const tick = (now) => {
         bossCheckpointTimer = bossTimer;
         if (playEatBombSfx) playEatBombSfx();
         startLineBurstAt(x, y, Math.max(0.7, r / 18));
-        if (boss.hp <= 0) startBossOutro();
+        if (boss.hp <= 0) beginBossOutro();
       },
       onPlayerDeath: () => { deathDelay = 0.45; },
       attackActive: () => attackFlashT > 0,
@@ -1890,6 +1873,9 @@ const tick = (now) => {
       if (!cutscenePending) player.x = 160;
     }
 
+    if (bossOutroInvulnerable && player._beingEaten) {
+      player._beingEaten = null;
+    }
     if (player._beingEaten) {
       player._beingEaten.t = clamp(player._beingEaten.t + dt / EAT.swallowDur, 0, 1);
       const tt = easeInOut(player._beingEaten.t);

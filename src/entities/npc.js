@@ -54,6 +54,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
     lerpAngle,
     dist,
   } = deps;
+  const playerInvulnerable = !!deps.playerInvulnerable;
 
   let nearestDangerDist = Infinity;
 
@@ -81,7 +82,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
       const capture = prC + n.r + EAT.capturePad;
 
       const playerCanEat = canEat(player.r, n.r);
-      const npcCanEat = canEat(n.r, player.r);
+      const npcCanEat = playerInvulnerable ? false : canEat(n.r, player.r);
 
       if (playerCanEat && d < capture + EAT.intentDist) {
         n.emotion = 'fear';
