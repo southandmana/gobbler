@@ -64,6 +64,9 @@ let bossDifficulty = 0;
 let bossDifficultyActive = false;
 let deathCount = 0;
 let enemiesKilled = 0;
+const MAX_LIVES_HALF = 8;
+const MAX_LIVES = MAX_LIVES_HALF / 2;
+let livesHalf = MAX_LIVES_HALF;
 const bossOutro = {
   active: false,
   phase: 'idle',
@@ -221,8 +224,9 @@ const deductScore = (pts, x, y) => {
 };
 
 const registerDeath = () => {
-  if (gameState.value === 'dying') return;
+  if (gameState.value === 'dying' || gameState.value === 'gameover') return;
   deathCount += 1;
+  livesHalf = Math.max(0, livesHalf - 1);
 };
 
 const scoreDifficulty01 = () => clamp(score / 120, 0, 1);
@@ -463,6 +467,7 @@ const resetGameVars = () => {
   bossDifficultyActive = false;
   deathCount = 0;
   enemiesKilled = 0;
+  livesHalf = MAX_LIVES_HALF;
   finishExit = false;
   finishFadeEntities.active = false;
   finishFadeEntities.t = 0;
@@ -555,6 +560,7 @@ const beginStartScreen = () => {
   bossDifficultyActive = false;
   deathCount = 0;
   enemiesKilled = 0;
+  livesHalf = MAX_LIVES_HALF;
   bossOutro.active = false;
   bossOutro.phase = 'idle';
   bossOutro.t = 0;
@@ -1974,7 +1980,10 @@ const tick = (now) => {
   if (gameState.value === 'dying') {
     if (bossPhase) diedInBoss = true;
     if (deathDelay > 0) deathDelay = Math.max(0, deathDelay - dt);
-    if (!burst.active && deathDelay <= 0) respawnAtCheckpoint();
+    if (!burst.active && deathDelay <= 0) {
+      if (livesHalf <= 0) beginGameOver();
+      else respawnAtCheckpoint();
+    }
   }
 
   draw();
@@ -2109,6 +2118,18 @@ const draw = () => {
       if (uiFade < 1) ctx.restore();
     } else {
       setBossTimerVisible(false);
+    }
+
+    const showHearts = (
+      gameState.value === 'playing'
+      || gameState.value === 'dying'
+      || gameState.value === 'paused'
+      || (gameState.value === 'cutscene' && showHealthBar)
+    );
+    if (showHearts) {
+      if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
+      drawLivesHud(ctx, w);
+      if (uiFade < 1) ctx.restore();
     }
   }
   if (cinematicUiHidden) setBossTimerVisible(false);
@@ -2368,6 +2389,59 @@ const drawStageCompleteStats = (ctx, w, h) => {
     ctx.fillText(line.value, rightX, y);
   }
   ctx.restore();
+};
+
+const drawHeartPath = (ctx, x, y, size) => {
+  const topCurve = size * 0.3;
+  ctx.beginPath();
+  ctx.moveTo(x, y + topCurve);
+  ctx.bezierCurveTo(x, y, x + size * 0.5, y, x + size * 0.5, y + topCurve);
+  ctx.bezierCurveTo(x + size * 0.5, y, x + size, y, x + size, y + topCurve);
+  ctx.bezierCurveTo(x + size, y + (size + topCurve) * 0.5, x + size * 0.5, y + size, x + size * 0.5, y + size);
+  ctx.bezierCurveTo(x + size * 0.5, y + size, x, y + (size + topCurve) * 0.5, x, y + topCurve);
+  ctx.closePath();
+};
+
+const drawHeart = (ctx, x, y, size, fill) => {
+  const emptyFill = 'rgba(0, 0, 0, 0.35)';
+  const fillColor = DEFAULT_PALETTE.body;
+  const outline = 'rgba(0, 0, 0, 0.6)';
+  const lineW = Math.max(1.2, size * 0.08);
+
+  ctx.save();
+  drawHeartPath(ctx, x, y, size);
+  ctx.fillStyle = emptyFill;
+  ctx.fill();
+
+  if (fill > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, size * fill, size);
+    ctx.clip();
+    drawHeartPath(ctx, x, y, size);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = lineW;
+  ctx.stroke();
+  ctx.restore();
+};
+
+const drawLivesHud = (ctx, w) => {
+  const size = Math.max(14, Math.min(22, w * 0.018));
+  const gap = Math.round(size * 0.3);
+  const totalW = MAX_LIVES * size + Math.max(0, MAX_LIVES - 1) * gap;
+  const x0 = Math.max(12, w - totalW - 16);
+  const y = 12;
+
+  for (let i = 0; i < MAX_LIVES; i++) {
+    const remaining = livesHalf - i * 2;
+    const fill = remaining >= 2 ? 1 : remaining === 1 ? 0.5 : 0;
+    drawHeart(ctx, x0 + i * (size + gap), y, size, fill);
+  }
 };
 
 const drawHealthBar = (ctx) => {
