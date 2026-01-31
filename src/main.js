@@ -2376,7 +2376,7 @@ const draw = () => {
   }
 
   if (gameState.value === 'start' || gameState.value === 'startTransition') {
-    drawScreenText(ctx, w, h, "DUCK'S SAKE", 'TAP TO START', '', getScreenAlpha());
+    drawScreenText(ctx, w, h, "FOR DUCK'S SAKE", 'TAP TO START', '', getScreenAlpha());
   } else if (gameState.value === 'gameover') {
     drawGameOverChoice(ctx, w, h);
   } else if (gameState.value === 'gameoverFinal') {
