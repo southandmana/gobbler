@@ -96,6 +96,8 @@ const startMenuNpc = {
   jumpReady: false,
   biteT: 0,
   biteDir: Math.PI,
+  prevX: 0,
+  prevY: 0,
   mouth: { open: 0, dir: 0, pulseT: 1, pulseDur: MOUTH.pulseDur, cooldown: 0 },
 };
 const dialogueSpeed = 38;
@@ -1219,6 +1221,19 @@ const getStartMenuNpcEatTarget = () => {
   };
 };
 
+const distToSegment = (ax, ay, bx, by, px, py) => {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const apx = px - ax;
+  const apy = py - ay;
+  const abLen2 = (abx * abx) + (aby * aby);
+  if (abLen2 <= 0.000001) return Math.hypot(apx, apy);
+  const t = clamp((apx * abx + apy * aby) / abLen2, 0, 1);
+  const cx = ax + abx * t;
+  const cy = ay + aby * t;
+  return Math.hypot(px - cx, py - cy);
+};
+
 const startStoryBombSequence = (button) => {
   startMenuHidden = true;
   startMenuKeepId = 'story';
@@ -1930,6 +1945,8 @@ const tick = (now) => {
     }
     updateMouth(startMenuNpc.mouth, dt, MOUTH, clamp);
     if (startMenuNpc.state === 'enter') {
+      startMenuNpc.prevX = startMenuNpc.x;
+      startMenuNpc.prevY = startMenuNpc.y;
       startMenuNpc.x += startMenuNpc.vx * dt;
       startMenuNpc.t += dt;
       if (startMenuNpc.jumpReady && startMenuNpc.bounceLeft > 0 && startMenuBomb.active) {
@@ -1950,8 +1967,8 @@ const tick = (now) => {
         startMenuNpc.jumpReady = true;
       }
       const capture = startMenuNpc.r + startMenuBomb.r + EAT.capturePad;
-      const d = dist(startMenuNpc.x, startMenuNpc.y, startMenuBomb.x, startMenuBomb.y);
-      if (startMenuBomb.active && d <= capture && startMenuBomb.state === 'idle') {
+      const d = distToSegment(startMenuNpc.prevX, startMenuNpc.prevY, startMenuNpc.x, startMenuNpc.y, startMenuBomb.x, startMenuBomb.y);
+      if (startMenuBomb.active && startMenuBomb.state === 'idle' && d <= capture) {
         startMenuNpc.state = 'bite';
         startMenuNpc.t = 0;
         startMenuNpc.biteDir = targetAngle;
