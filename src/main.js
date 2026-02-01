@@ -60,6 +60,8 @@ const START_TITLE_FADE_DUR = 0.35;
 let startGamePending = false;
 let startGameDelay = 0;
 let startMenuPressedId = null;
+let startMenuHidden = false;
+let startMenuKeepId = null;
 const dialogueSpeed = 38;
 const dialogueMouth = { t: 0, min: 0.18, max: 0.48, speed: 30 };
 const scoreFade = { active: false, t: 0, dur: 0.6 };
@@ -640,6 +642,8 @@ const beginStartScreen = () => {
   startGamePending = false;
   startGameDelay = 0;
   startMenuPressedId = null;
+  startMenuHidden = false;
+  startMenuKeepId = null;
 };
 
 const beginGame = () => {
@@ -1632,6 +1636,8 @@ addEventListener('pointerup', (ev) => {
             startMode = 'story';
             startGamePending = true;
             startGameDelay = 2.0;
+            startMenuHidden = true;
+            startMenuKeepId = 'story';
           }
         }
         break;
@@ -2968,7 +2974,9 @@ const drawStartMenuChoice = (ctx, w, h, alpha = 1) => {
 
   const buttons = getStartMenuButtons(w, h);
   for (const b of buttons) {
+    if (startMenuHidden && startMenuKeepId && b.id !== startMenuKeepId) continue;
     const isPressed = startMenuPressedId === b.id;
+    const invertStory = (b.id === 'story' && startMenuHidden && startMenuKeepId === 'story');
     const scale = isPressed ? 0.96 : 1;
     const cx = b.x + b.w * 0.5;
     const cy = b.y + b.h * 0.5;
@@ -2976,14 +2984,24 @@ const drawStartMenuChoice = (ctx, w, h, alpha = 1) => {
     ctx.translate(cx, cy);
     ctx.scale(scale, scale);
     ctx.translate(-cx, -cy);
-    ctx.fillStyle = '#000';
-    ctx.strokeStyle = 'rgba(242, 244, 247, 0.9)';
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
-    ctx.fillStyle = '#f2f4f7';
+    ctx.fillStyle = invertStory ? 'rgba(242, 244, 247, 0.95)' : '#000';
+    ctx.strokeStyle = invertStory ? '#000' : 'rgba(242, 244, 247, 0.9)';
+    if (invertStory) {
+      const r = b.h * 0.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeRect(b.x, b.y, b.w, b.h);
+    }
+    ctx.fillStyle = invertStory ? '#000' : '#f2f4f7';
     let fontSize = 16;
     ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    while (ctx.measureText(b.label).width > b.w - 16 && fontSize > 11) {
+    const maxTextW = invertStory ? (b.h * 0.8) : (b.w - 16);
+    while (ctx.measureText(b.label).width > maxTextW && fontSize > 11) {
       fontSize -= 1;
       ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     }
