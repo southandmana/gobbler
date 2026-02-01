@@ -22,6 +22,26 @@ scoreLockEl.className = 'score-lock';
 scoreLockEl.setAttribute('aria-hidden', 'true');
 scoreEl.appendChild(scoreLockEl);
 
+const highScoreEl = document.createElement('div');
+highScoreEl.className = 'highscore';
+const trophyEl = document.createElement('span');
+trophyEl.className = 'trophy-icon';
+trophyEl.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v2h3v4c0 3-2.2 5.3-5.2 5.9a6 6 0 0 1-2.8 2.2V20h3v2H9v-2h3v-1.9a6 6 0 0 1-2.8-2.2C6.2 15.3 4 13 4 10V6h3V4zm0 4H6v2c0 2 1.5 3.7 3.4 4.1-.3-.8-.4-1.7-.4-2.6V8zm10 0v3.5c0 .9-.1 1.8-.4 2.6C18.5 13.7 20 12 20 10V8h-1z"/></svg>';
+const highScoreValueEl = document.createElement('span');
+highScoreValueEl.className = 'highscore-value';
+highScoreEl.appendChild(trophyEl);
+highScoreEl.appendChild(highScoreValueEl);
+document.body.appendChild(highScoreEl);
+
+let highScore = 0;
+try {
+  const stored = Number.parseInt(localStorage.getItem('gobblerHighScore') || '0', 10);
+  highScore = Number.isFinite(stored) ? stored : 0;
+} catch {
+  highScore = 0;
+}
+highScoreValueEl.textContent = `${highScore} pts`;
+
 const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | gameoverFinal | restartTransition | cutscene | stageclear
 
 const BOSS_PALETTE = {
@@ -275,9 +295,28 @@ const setScore = (n) => {
   const next = Math.max(0, Math.round(n));
   score = next;
   scoreValueEl.textContent = `${next} pts`;
+  if (next > highScore) {
+    highScore = next;
+    highScoreValueEl.textContent = `${highScore} pts`;
+    try { localStorage.setItem('gobblerHighScore', String(highScore)); } catch {}
+  }
 };
-const showScore = (show) => { scoreEl.style.display = show ? 'flex' : 'none'; };
-const setScoreOpacity = (v) => { scoreEl.style.opacity = v; };
+const showScore = (show) => {
+  const display = show ? 'flex' : 'none';
+  scoreEl.style.display = display;
+  highScoreEl.style.display = (show && isArcade()) ? 'flex' : 'none';
+};
+const setScoreOpacity = (v) => {
+  scoreEl.style.opacity = v;
+  highScoreEl.style.opacity = v;
+};
+
+const applyHudMode = () => {
+  document.body.classList.toggle('hud-arcade', isArcade());
+  if (scoreEl.style.display !== 'none') {
+    highScoreEl.style.display = isArcade() ? 'flex' : 'none';
+  }
+};
 let waveT = 0;
 let reliefActive = false;
 let stress = 0;
@@ -630,6 +669,7 @@ const resetGameVars = () => {
 
 const beginStartScreen = () => {
   gameState.value = 'start';
+  applyHudMode();
   menuScrollX = scrollX;
   showScore(false);
   gameOverFinal.active = false;
@@ -768,6 +808,7 @@ const beginGame = () => {
   resetGameVars();
   spawnDustDelay = 0.3;
   spawnDustPending = true;
+  applyHudMode();
   showScore(true);
   gameState.value = 'playing';
   updateDifficulty();
@@ -1773,10 +1814,12 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'b' || e.key === 'B') {
+    if (isArcade()) return;
     triggerBossOutroSkip();
     return;
   }
   if (e.key === 'k' || e.key === 'K') {
+    if (isArcade()) return;
     if (gameState.value === 'playing' || gameState.value === 'cutscene') {
       livesHalf = 0;
       beginGameOver();
@@ -1784,6 +1827,7 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'r' || e.key === 'R') {
+    if (isArcade()) return;
     resetGameVars(); beginStartScreen(); return;
   }
   if (isDialogueActive()) { advanceDialogue(); return; }
@@ -1797,6 +1841,7 @@ addEventListener('keydown', (e) => {
     else if (!finishExit) inputPress();
   }
   if (e.code === 'Enter') {
+    if (isArcade()) return;
     if (gameState.value === 'playing') warpNearFinish();
   }
 }, { passive: false });
@@ -1829,9 +1874,11 @@ addEventListener('pointerdown', (ev) => {
           startMenuPressedId = b.id;
           if (b.id === 'story') {
             startMode = 'story';
+            applyHudMode();
             startStoryBombSequence(b);
           } else if (b.id === 'arcade') {
             startMode = 'arcade';
+            applyHudMode();
             startStartTransition(false);
           }
           return;
@@ -2964,10 +3011,15 @@ const drawDialogueBox = (ctx, w, h) => {
 const drawPauseDebugKeys = (ctx, w, h) => {
   const lines = [
     'H: debug HUD',
-    'B: boss outro',
-    'R: reset to start',
-    'ENTER: warp near finish',
+    'P: pause/resume',
   ];
+  if (!isArcade()) {
+    lines.push('B: boss outro');
+    lines.push('R: reset to start');
+    lines.push('K: game over (test)');
+    lines.push('ENTER: warp near finish');
+  }
+  lines.push('SPACE: tap / flap');
   const lineH = 16;
   const startY = (h / 2) + 86;
   ctx.save();

@@ -65,7 +65,7 @@ export const drawUI = (ctx, w, h, state, deps) => {
       ctx.restore();
     }
 
-    const showHearts = (
+    const showHearts = !isArcade && (
       gameStateValue === 'playing'
       || gameStateValue === 'dying'
       || gameStateValue === 'paused'
