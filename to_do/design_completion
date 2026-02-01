@@ -1,0 +1,76 @@
+# Design Completion: Pro Performance Switch Plan
+
+Goal
+- Keep procedural art while designing.
+- When visuals and mechanics are stable, switch to atlas-based rendering with minimal risk.
+- Target pro-style performance: pre-rendered sprites + batched draw calls (or PixiJS if needed).
+
+When to switch
+- Core gameplay feels locked.
+- Visual style is stable (no frequent shape changes).
+- Mobile testing shows performance limits with procedural draw.
+
+Phase 0: Prep (low impact, do anytime)
+1) Keep a single render entry point.
+   - All rendering should flow through one module (already in progress).
+2) Keep procedural draw functions deterministic.
+   - Given the same inputs, they should render identically.
+3) Avoid scattered draw logic.
+   - New visual elements should go through the render modules, not ad hoc draw calls.
+
+Phase 1: Build the atlas pipeline (no runtime switch yet)
+1) Add a build script (node) to generate sprites.
+   - Render each sprite state to an offscreen canvas.
+   - Save PNG files for each sprite + a JSON manifest.
+2) Decide the atlas layout.
+   - Simple: one PNG per sprite state.
+   - Pro: pack many sprites into a single atlas PNG + JSON map.
+3) Add a versioning strategy.
+   - Example: atlas v1 (per release) to match design milestones.
+
+Phase 2: Render adapter (runtime switch)
+1) Create a render adapter layer.
+   - Interface: drawPlayer, drawNpc, drawBomb, drawStar, etc.
+2) Add a single switch.
+   - Example: useAtlas = true/false.
+   - If false: call procedural draw functions.
+   - If true: draw from atlas using drawImage().
+
+Phase 3: Convert assets in priority order
+1) Player + NPCs
+   - Most frequent draws.
+   - Cache states by size bucket + mouth open state + wing frame.
+2) Hazards + Powerups
+   - Bomb + star.
+3) Effects
+   - Dust, sparkles, shatter, line burst.
+   - These are heavy; atlas pays off most.
+4) UI elements
+   - Keep on Canvas or move to HTML overlay (either is fine).
+
+Phase 4: Performance validation
+1) Measure FPS on a mid-range phone.
+2) Compare CPU usage and battery draw.
+3) Validate parity vs procedural render.
+   - Frame-by-frame visual check for key sequences.
+
+Phase 5: Optional PixiJS migration (if still laggy)
+1) Keep game logic as-is.
+2) Replace render adapter to emit Pixi sprites.
+3) Load the same atlas (Pixi supports atlases natively).
+4) Move effects into Pixi containers for batching.
+
+Notes and guardrails
+- Do not delete procedural sources. Keep them as the master for future art changes.
+- Atlas build should be repeatable and deterministic.
+- Keep a "golden scene" for visual regression checks (boss fight + lots of effects).
+
+Checklist to flip the switch
+- [ ] Atlas build script exists
+- [ ] Manifest describes each sprite state
+- [ ] Render adapter in place
+- [ ] Player/NPC/bomb/star fully mapped
+- [ ] Effects mapped or replaced
+- [ ] Mobile FPS tested
+- [ ] Visual parity validated
+
