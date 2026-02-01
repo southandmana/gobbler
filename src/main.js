@@ -132,6 +132,11 @@ const playTextTapSfx = createSfxPool('assets/sfx/text_message_tap.wav', 4, 0.7);
 const playBossExplosionSfx = createSfxPool('assets/sfx/bomb_hits_ground.wav', 5, 0.75);
 const playBossPopSfx = createSfxPool('assets/sfx/eat_bomb.wav', 4, 0.7);
 
+const titleImage = new Image();
+let titleImageReady = false;
+titleImage.onload = () => { titleImageReady = true; };
+titleImage.src = 'assets/game_title_1.png';
+
 const levelMusic = (() => {
   const audio = new Audio('assets/sfx/level1_part1_music.mp3');
   audio.preload = 'auto';
@@ -2261,7 +2266,39 @@ const draw = () => {
   }
 
   if (gameState.value === 'start' || gameState.value === 'startTransition') {
-    drawScreenText(ctx, w, h, "FOR DUCK'S SAKE", 'TAP TO START', '', getScreenAlpha());
+    const a = getScreenAlpha();
+    if (titleImageReady) {
+      const imgW = titleImage.naturalWidth || 0;
+      const imgH = titleImage.naturalHeight || 0;
+      if (imgW > 0 && imgH > 0) {
+        const scale = 0.5;
+        const drawW = imgW * scale;
+        const drawH = imgH * scale;
+        const x = (w - drawW) * 0.5;
+        const y = (h * 0.32) - (drawH * 0.5);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.drawImage(titleImage, x, y, drawW, drawH);
+        ctx.restore();
+      }
+    } else {
+      drawScreenText(ctx, w, h, "FOR DUCK'S SAKE", '', '', a);
+    }
+
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(242, 244, 247, 1)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '600 20px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.lineWidth = 4;
+    const subY = (h * 0.32) + 110;
+    ctx.strokeText('TAP TO START', w * 0.5, subY);
+    ctx.fillText('TAP TO START', w * 0.5, subY);
+    ctx.restore();
   } else if (gameState.value === 'gameover') {
     drawGameOverChoice(ctx, w, h);
   } else if (gameState.value === 'gameoverFinal') {
