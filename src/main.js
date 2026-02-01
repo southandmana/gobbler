@@ -62,6 +62,15 @@ let startGameDelay = 0;
 let startMenuPressedId = null;
 let startMenuHidden = false;
 let startMenuKeepId = null;
+const START_MENU_NPC_SPEED = 360;
+const START_MENU_NPC_JUMP_VX = -260;
+const START_MENU_NPC_JUMP_VY = -420;
+const START_MENU_SHAKE_DUR = 0.25;
+const START_MENU_SHAKE_AMP = 3;
+const START_MENU_BOMB_SCALE = 0.6;
+let startMenuBoom = 0;
+const startMenuBomb = { active: false, state: 'idle', x: 0, y: 0, r: 0, x0: 0, y0: 0, r0: 0, t: 0 };
+const startMenuNpc = { active: false, state: 'idle', x: 0, y: 0, r: 0, vx: 0, vy: 0, t: 0, mouth: { open: 0, dir: 0, pulseT: 1, pulseDur: MOUTH.pulseDur, cooldown: 0 } };
 const dialogueSpeed = 38;
 const dialogueMouth = { t: 0, min: 0.18, max: 0.48, speed: 30 };
 const scoreFade = { active: false, t: 0, dur: 0.6 };
@@ -169,9 +178,12 @@ const dialogueMusic = (() => {
 })();
 
 const burst = createBurst();
+const startMenuBurst = createBurst();
 const headShatter = createShatter();
 const npcShatter = createShatter();
+const startMenuNpcShatter = createShatter();
 const lineBurst = createLineBurst();
+const startMenuLineBurst = createLineBurst();
 const bossExplosions = [];
 const floaters = createFloaters();
 const sparkles = createSparkles();
@@ -419,6 +431,18 @@ const startNpcShatterAt = (x, y, r) => startHeadShatter(
   clamp,
   { countScale: 0.6, countMin: 4, countMax: 8, sizeMin: 0.05, sizeMax: 0.09, fadeDur: 0.22, velScale: 1 }
 );
+const startMenuNpcShatterAt = (x, y, r) => startHeadShatter(
+  startMenuNpcShatter,
+  x,
+  y,
+  r,
+  rand,
+  NPC_PALETTE,
+  groundY() + getStartViewOffset(),
+  1,
+  clamp,
+  { countScale: 0.6, countMin: 4, countMax: 8, sizeMin: 0.05, sizeMax: 0.09, fadeDur: 0.22, velScale: 1 }
+);
 const startBossShatterAt = (x, y, r) => startHeadShatter(
   headShatter,
   x,
@@ -644,6 +668,20 @@ const beginStartScreen = () => {
   startMenuPressedId = null;
   startMenuHidden = false;
   startMenuKeepId = null;
+  startMenuBoom = 0;
+  startMenuBomb.active = false;
+  startMenuBomb.state = 'idle';
+  startMenuBomb.t = 0;
+  startMenuNpc.active = false;
+  startMenuNpc.state = 'idle';
+  startMenuBurst.active = false;
+  startMenuBurst.t = 0;
+  startMenuBurst.particles.length = 0;
+  startMenuLineBurst.active = false;
+  startMenuLineBurst.t = 0;
+  startMenuLineBurst.puffs.length = 0;
+  startMenuNpcShatter.active = false;
+  startMenuNpcShatter.pieces.length = 0;
 };
 
 const beginGame = () => {
@@ -1084,6 +1122,77 @@ const startStartTransition = (scrollOnly = false) => {
     screenAnim.dur = 0.45;
     gameState.value = 'startTransition';
   }
+};
+
+const getStartMenuNpcEatTarget = () => {
+  const dir = startMenuNpc.mouth?.dir ?? Math.PI;
+  const flipX = Math.cos(dir) < 0;
+  const angle = flipX ? (Math.PI - dir) : dir;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const offX = (flipX ? -1 : 1) * startMenuNpc.r * 0.4;
+  const offY = startMenuNpc.r * 0.1;
+  return {
+    x: startMenuNpc.x + offX * cos - offY * sin,
+    y: startMenuNpc.y + offX * sin + offY * cos,
+  };
+};
+
+const startStoryBombSequence = (button) => {
+  startMenuHidden = true;
+  startMenuKeepId = 'story';
+  startMenuPressedId = null;
+  startGamePending = false;
+  startGameDelay = 0;
+  startMenuBoom = 0;
+  startMenuBomb.active = true;
+  startMenuBomb.state = 'idle';
+  startMenuBomb.t = 0;
+  startMenuBomb.x = button.x + button.w * 0.5;
+  startMenuBomb.y = button.y + button.h * 0.5;
+  startMenuBomb.r = Math.max(18, button.h * START_MENU_BOMB_SCALE);
+  startMenuBomb.x0 = startMenuBomb.x;
+  startMenuBomb.y0 = startMenuBomb.y;
+  startMenuBomb.r0 = startMenuBomb.r;
+  startMenuBurst.active = false;
+  startMenuBurst.t = 0;
+  startMenuBurst.particles.length = 0;
+  startMenuLineBurst.active = false;
+  startMenuLineBurst.t = 0;
+  startMenuLineBurst.puffs.length = 0;
+  startMenuNpc.active = true;
+  startMenuNpc.state = 'enter';
+  startMenuNpc.r = Math.max(16, button.h * 0.55);
+  startMenuNpc.x = innerWidth + startMenuNpc.r + 40;
+  startMenuNpc.y = startMenuBomb.y + startMenuNpc.r * 0.15;
+  startMenuNpc.vx = -Math.max(START_MENU_NPC_SPEED, innerWidth * 0.45);
+  startMenuNpc.vy = 0;
+  startMenuNpc.t = 0;
+  startMenuNpc.mouth.open = 0;
+  startMenuNpc.mouth.dir = Math.PI;
+  startMenuNpc.mouth.pulseT = 1;
+  startMenuNpc.mouth.cooldown = 0;
+};
+
+const triggerStartMenuExplosion = () => {
+  if (!startMenuBomb.active) return;
+  const x = startMenuBomb.x;
+  const y = startMenuBomb.y;
+  const r = startMenuBomb.r0 || startMenuBomb.r;
+  startMenuBomb.active = false;
+  startMenuKeepId = null;
+  if (startMenuNpc.active) {
+    startMenuNpcShatterAt(startMenuNpc.x, startMenuNpc.y, startMenuNpc.r);
+    startMenuNpc.active = false;
+    startMenuNpc.state = 'idle';
+  }
+  startMenuBoom = START_MENU_SHAKE_DUR;
+  startLineBurst(startMenuLineBurst, x, y, rand, Math.max(0.7, r / 18), 0.2);
+  startBurst(startMenuBurst, x, y, rand, 0.45);
+  playEatBombSfx();
+  playBossExplosionSfx();
+  startGamePending = true;
+  startGameDelay = 2.0;
 };
 
 const startRestartTransition = () => {
@@ -1590,6 +1699,7 @@ const toCanvasXY = (ev) => {
 addEventListener('pointerdown', (ev) => {
   const { x, y } = toCanvasXY(ev);
   if (gameState.value === 'start') {
+    if (startMenuHidden || startGamePending || startMenuNpc.active) return;
     if (!screenAnim.active && startViewSettled) {
       const buttons = getStartMenuButtons(innerWidth, innerHeight);
       const yAdjusted = y - getStartViewOffset();
@@ -1634,10 +1744,7 @@ addEventListener('pointerup', (ev) => {
         if (x >= b.x && x <= b.x + b.w && yAdjusted >= b.y && yAdjusted <= b.y + b.h) {
           if (b.id === 'story') {
             startMode = 'story';
-            startGamePending = true;
-            startGameDelay = 2.0;
-            startMenuHidden = true;
-            startMenuKeepId = 'story';
+            startStoryBombSequence(b);
           }
         }
         break;
@@ -1680,6 +1787,53 @@ const tick = (now) => {
   }
   if (startTitleHidden && startTitleFade > 0) {
     startTitleFade = Math.max(0, startTitleFade - (dt / START_TITLE_FADE_DUR));
+  }
+  if (startMenuBoom > 0) {
+    startMenuBoom = Math.max(0, startMenuBoom - dt);
+  }
+  if (startMenuBurst.active) updateBurst(startMenuBurst, dt, clamp);
+  if (startMenuLineBurst.active) updateLineBurst(startMenuLineBurst, dt, clamp);
+  if (startMenuNpcShatter.active) updateShatter(startMenuNpcShatter, dt);
+  if (startMenuNpc.active && (gameState.value === 'start' || gameState.value === 'startTransition')) {
+    startMenuNpc.mouth.dir = Math.PI;
+    updateMouth(startMenuNpc.mouth, dt, MOUTH, clamp);
+    if (startMenuNpc.state === 'enter') {
+      startMenuNpc.x += startMenuNpc.vx * dt;
+      startMenuNpc.t += dt;
+      const capture = startMenuNpc.r + startMenuBomb.r + EAT.capturePad;
+      const d = dist(startMenuNpc.x, startMenuNpc.y, startMenuBomb.x, startMenuBomb.y);
+      if (startMenuBomb.active && d <= capture && startMenuBomb.state === 'idle') {
+        startMenuNpc.state = 'bite';
+        startMenuNpc.t = 0;
+        triggerChomp(startMenuNpc.mouth, MOUTH);
+        startMenuBomb.state = 'eaten';
+        startMenuBomb.t = 0;
+        startMenuBomb.x0 = startMenuBomb.x;
+        startMenuBomb.y0 = startMenuBomb.y;
+        startMenuBomb.r0 = startMenuBomb.r;
+      }
+    } else if (startMenuNpc.state === 'bite') {
+      startMenuNpc.t += dt;
+    } else if (startMenuNpc.state === 'exit') {
+      startMenuNpc.x += startMenuNpc.vx * dt;
+      startMenuNpc.y += startMenuNpc.vy * dt;
+      startMenuNpc.vy += 900 * dt;
+      if (startMenuNpc.x < -startMenuNpc.r - 80 || startMenuNpc.y > innerHeight + startMenuNpc.r) {
+        startMenuNpc.active = false;
+      }
+    }
+  }
+  if (startMenuBomb.active && startMenuBomb.state === 'eaten') {
+    const target = getStartMenuNpcEatTarget();
+    startMenuBomb.t = clamp(startMenuBomb.t + dt / EAT.swallowDur, 0, 1);
+    const tt = easeInOut(startMenuBomb.t);
+    startMenuBomb.x = lerp(startMenuBomb.x0, target.x, tt);
+    startMenuBomb.y = lerp(startMenuBomb.y0, target.y, tt);
+    startMenuBomb.r = lerp(startMenuBomb.r0, 0, tt);
+    if (startMenuBomb.t >= 1) {
+      startMenuBomb.state = 'gone';
+      triggerStartMenuExplosion();
+    }
   }
 
   if (gameState.value === 'paused') {
@@ -2280,7 +2434,9 @@ const draw = () => {
   const renderGroundY = groundY() + startOffset;
   const bgScrollX = drawBackdrop(ctx, w, h, renderGroundY, scrollX, menuScrollX, gameState.value, bossOutro.blackBackdrop, starsFar, bgCache);
 
-  const shakeAmp = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode')) ? 6 : 0;
+  const bossShake = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode')) ? 6 : 0;
+  const menuShake = (startMenuBoom > 0) ? (START_MENU_SHAKE_AMP * (startMenuBoom / START_MENU_SHAKE_DUR)) : 0;
+  const shakeAmp = Math.max(bossShake, menuShake);
   if (shakeAmp > 0) {
     ctx.save();
     ctx.translate(rand(-shakeAmp, shakeAmp), rand(-shakeAmp, shakeAmp));
@@ -2973,41 +3129,66 @@ const drawStartMenuChoice = (ctx, w, h, alpha = 1) => {
   ctx.lineWidth = 3;
 
   const buttons = getStartMenuButtons(w, h);
-  for (const b of buttons) {
-    if (startMenuHidden && startMenuKeepId && b.id !== startMenuKeepId) continue;
-    const isPressed = startMenuPressedId === b.id;
-    const invertStory = (b.id === 'story' && startMenuHidden && startMenuKeepId === 'story');
-    const scale = isPressed ? 0.96 : 1;
-    const cx = b.x + b.w * 0.5;
-    const cy = b.y + b.h * 0.5;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(scale, scale);
-    ctx.translate(-cx, -cy);
-    ctx.fillStyle = invertStory ? 'rgba(242, 244, 247, 0.95)' : '#000';
-    ctx.strokeStyle = invertStory ? '#000' : 'rgba(242, 244, 247, 0.9)';
-    if (invertStory) {
-      const r = b.h * 0.5;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    } else {
+  const hideAllButtons = startMenuHidden && !startMenuKeepId;
+  if (!hideAllButtons) {
+    for (const b of buttons) {
+      if (startMenuHidden && startMenuKeepId && b.id !== startMenuKeepId) continue;
+      if (startMenuHidden && startMenuKeepId === 'story' && b.id === 'story' && !startMenuBomb.active) continue;
+      const showBomb = (b.id === 'story' && startMenuBomb.active);
+      if (showBomb) {
+        drawDynamiteBomb(ctx, startMenuBomb.x, startMenuBomb.y, startMenuBomb.r);
+        ctx.save();
+        const baseR = startMenuBomb.r0 || startMenuBomb.r;
+        const bombScale = baseR > 0 ? (startMenuBomb.r / baseR) : 1;
+        ctx.translate(startMenuBomb.x, startMenuBomb.y);
+        ctx.scale(bombScale, bombScale);
+        ctx.translate(-startMenuBomb.x, -startMenuBomb.y);
+        ctx.fillStyle = '#f2f4f7';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.lineWidth = 3;
+        let fontSize = 14;
+        ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+        const maxTextW = startMenuBomb.r * 1.6;
+        while (ctx.measureText(b.label).width > maxTextW && fontSize > 10) {
+          fontSize -= 1;
+          ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+        }
+        const textY = startMenuBomb.y + (fontSize * 0.05);
+        ctx.strokeText(b.label, startMenuBomb.x, textY);
+        ctx.fillText(b.label, startMenuBomb.x, textY);
+        ctx.restore();
+        continue;
+      }
+      const isPressed = startMenuPressedId === b.id;
+      const scale = isPressed ? 0.96 : 1;
+      const cx = b.x + b.w * 0.5;
+      const cy = b.y + b.h * 0.5;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(scale, scale);
+      ctx.translate(-cx, -cy);
+      ctx.fillStyle = '#000';
+      ctx.strokeStyle = 'rgba(242, 244, 247, 0.9)';
       ctx.fillRect(b.x, b.y, b.w, b.h);
       ctx.strokeRect(b.x, b.y, b.w, b.h);
-    }
-    ctx.fillStyle = invertStory ? '#000' : '#f2f4f7';
-    let fontSize = 16;
-    ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    const maxTextW = invertStory ? (b.h * 0.8) : (b.w - 16);
-    while (ctx.measureText(b.label).width > maxTextW && fontSize > 11) {
-      fontSize -= 1;
+      ctx.fillStyle = '#f2f4f7';
+      let fontSize = 16;
       ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      const maxTextW = b.w - 16;
+      while (ctx.measureText(b.label).width > maxTextW && fontSize > 11) {
+        fontSize -= 1;
+        ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      }
+      ctx.fillText(b.label, b.x + b.w * 0.5, b.y + b.h * 0.56);
+      ctx.restore();
     }
-    ctx.fillText(b.label, b.x + b.w * 0.5, b.y + b.h * 0.56);
-    ctx.restore();
   }
+  if (startMenuNpc.active) {
+    drawCharacter(ctx, startMenuNpc.x, startMenuNpc.y, startMenuNpc.r, Math.PI, startMenuNpc.mouth.open, 'neutral', 1);
+  }
+  if (startMenuNpcShatter.active) drawShatter(ctx, startMenuNpcShatter);
+  if (startMenuLineBurst.active) drawLineBurst(ctx, startMenuLineBurst, lerp);
+  if (startMenuBurst.active) drawBurst(ctx, startMenuBurst, lerp);
   ctx.restore();
 };
 
