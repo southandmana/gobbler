@@ -6,6 +6,11 @@ export const makeStars = (n, rand) => {
   return s;
 };
 
+export const createBackgroundCache = () => ({
+  sky: { canvas: document.createElement('canvas'), w: 0, h: 0 },
+  stars: { canvas: document.createElement('canvas'), w: 0, h: 0, groundY: 0, starsRef: null },
+});
+
 export const drawStars = (ctx, stars, mul, scrollX, groundY, width) => {
   const off = (scrollX * mul) % width;
   ctx.save();
@@ -28,6 +33,52 @@ export const drawSky = (ctx, width, height) => {
   g.addColorStop(1, '#f3ecf6');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, width, height);
+};
+
+const ensureSkyCache = (cache, width, height) => {
+  if (cache.sky.w === width && cache.sky.h === height) return;
+  const c = cache.sky.canvas;
+  cache.sky.w = width;
+  cache.sky.h = height;
+  c.width = width;
+  c.height = height;
+  const cctx = c.getContext('2d');
+  drawSky(cctx, width, height);
+};
+
+const ensureStarsCache = (cache, width, groundY, stars) => {
+  if (cache.stars.w === width && cache.stars.groundY === groundY && cache.stars.starsRef === stars) return;
+  const c = cache.stars.canvas;
+  cache.stars.w = width;
+  cache.stars.h = Math.max(1, Math.ceil(groundY));
+  cache.stars.groundY = groundY;
+  cache.stars.starsRef = stars;
+  c.width = cache.stars.w;
+  c.height = cache.stars.h;
+  const cctx = c.getContext('2d');
+  cctx.clearRect(0, 0, c.width, c.height);
+  cctx.save();
+  cctx.globalAlpha = 0.6;
+  cctx.fillStyle = '#ffffff';
+  for (const s of stars) {
+    const x = s.x * width;
+    const y = s.y * (groundY - 30);
+    cctx.beginPath();
+    cctx.arc(x, y, s.r, 0, Math.PI * 2);
+    cctx.fill();
+  }
+  cctx.restore();
+};
+
+const drawStarsCached = (ctx, cache, mul, scrollX, groundY, width, stars) => {
+  ensureStarsCache(cache, width, groundY, stars);
+  const off = (scrollX * mul) % width;
+  const x = -off;
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.drawImage(cache.stars.canvas, x, 0);
+  if (x < 0) ctx.drawImage(cache.stars.canvas, x + width, 0);
+  ctx.restore();
 };
 
 export const drawHills = (ctx, width, groundY, scrollX) => {
@@ -100,6 +151,30 @@ export const drawGround = (ctx, groundY, width, height, scrollX) => {
   }
 
   // no horizon line
+};
+
+export const drawBackdrop = (ctx, width, height, groundY, scrollX, menuScrollX, gameStateValue, bossBlackBackdrop, stars, cache = null) => {
+  const useBlackBackdrop = bossBlackBackdrop || gameStateValue === 'stageclear' || gameStateValue === 'gameoverFinal';
+  const bgScrollX = (gameStateValue === 'start' || gameStateValue === 'startTransition')
+    ? menuScrollX
+    : scrollX + menuScrollX;
+
+  if (useBlackBackdrop) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    if (cache) {
+      ensureSkyCache(cache, width, height);
+      ctx.drawImage(cache.sky.canvas, 0, 0);
+      drawStarsCached(ctx, cache, 0.05, bgScrollX, groundY, width, stars);
+    } else {
+      drawSky(ctx, width, height);
+      drawStars(ctx, stars, 0.05, bgScrollX, groundY, width);
+    }
+    drawHills(ctx, width, groundY, bgScrollX);
+  }
+
+  return bgScrollX;
 };
 
 export const drawScreenText = (ctx, width, height, title, subtitle, extra, alpha) => {

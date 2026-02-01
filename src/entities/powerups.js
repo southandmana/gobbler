@@ -69,33 +69,36 @@ export const updateBlues = (blues, player, dt, move, deps) => {
   }
 };
 
-export const drawStar = (ctx, x, y, r, specks = null, t = 0) => {
+export const drawStarSpecks = (ctx, x, y, r, specks, t = 0) => {
   const rr = Math.max(0, r);
-  if (rr <= 0) return;
-
+  if (rr <= 0 || !specks || !specks.length) return;
   ctx.save();
   ctx.translate(x, y);
   const baseAlpha = ctx.globalAlpha;
+  ctx.globalCompositeOperation = 'screen';
+  ctx.fillStyle = '#ffe2a1';
+  for (const s of specks) {
+    const a = s.a + t * 0.6;
+    const d = rr * s.dist;
+    const alpha = 0.18 + 0.42 * (0.5 + 0.5 * Math.sin(t * 4 + s.phase));
+    const sr = Math.max(1, rr * s.size);
+    ctx.globalAlpha = baseAlpha * alpha;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * d, Math.sin(a) * d, sr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = baseAlpha;
+  ctx.restore();
+};
 
+const drawStarBase = (ctx, x, y, r) => {
+  const rr = Math.max(0, r);
+  if (rr <= 0) return;
+  ctx.save();
+  ctx.translate(x, y);
   const spikes = 5;
   const outer = rr * 1.10;
   const inner = rr * 0.70;
-
-  if (specks && specks.length) {
-    ctx.globalCompositeOperation = 'screen';
-    ctx.fillStyle = '#ffe2a1';
-    for (const s of specks) {
-      const a = s.a + t * 0.6;
-      const d = rr * s.dist;
-      const alpha = 0.18 + 0.42 * (0.5 + 0.5 * Math.sin(t * 4 + s.phase));
-      const sr = Math.max(1, rr * s.size);
-      ctx.globalAlpha = baseAlpha * alpha;
-      ctx.beginPath();
-      ctx.arc(Math.cos(a) * d, Math.sin(a) * d, sr, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = baseAlpha;
-  }
 
   const drawStarPath = (o, i) => {
     ctx.beginPath();
@@ -129,6 +132,18 @@ export const drawStar = (ctx, x, y, r, specks = null, t = 0) => {
   ctx.lineWidth = Math.max(1, rr * 0.08);
   ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.stroke();
-
   ctx.restore();
+};
+
+export const drawStar = (ctx, x, y, r, specks = null, t = 0) => {
+  const hasSpecks = !!(specks && specks.length);
+  if (hasSpecks) {
+    drawStarSpecks(ctx, x, y, r, specks, t);
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    drawStarBase(ctx, x, y, r);
+    ctx.restore();
+    return;
+  }
+  drawStarBase(ctx, x, y, r);
 };

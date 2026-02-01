@@ -1,12 +1,14 @@
 import { PHYS, SQUASH, STAND, WORLD, EAT, HAZARD, SCORE, GROW, SPAWN, GAP, MOUTH, BALANCE, TRAIL, WAVE, DDA } from './config.js';
 import { clamp, rand, lerp, easeInOut, dist, lerpAngle } from './utils/math.js';
-import { makeStars, drawStars, drawSky, drawHills, drawGround, drawScreenText } from './render/background.js';
+import { makeStars, createBackgroundCache, drawBackdrop, drawGround, drawScreenText } from './render/background.js';
+import { drawWorldEntities } from './render/world.js';
+import { drawUI } from './render/ui.js';
 import { createBurst, startBurst, updateBurst, drawBurst, createShatter, startHeadShatter, updateShatter, drawShatter, createLineBurst, startLineBurst, updateLineBurst, drawLineBurst, createFloaters, popText, updateFloaters, drawFloaters, createSparkles, startSparkles, updateSparkles, drawSparkles, createDustPuffs, startDustPuff, updateDustPuffs, drawDustPuffs } from './render/effects.js';
 import { createPlayer, drawPlayer2, DEFAULT_PALETTE } from './entities/player.js';
 import { updateMouth, triggerChomp } from './entities/mouth.js';
 import { makeNPC, updateNPCs, driftNPCs, drawCharacter, NPC_PALETTE } from './entities/npc.js';
 import { makeRed, updateReds, driftReds, drawDynamiteBomb } from './entities/hazards.js';
-import { makeBlue, updateBlues, driftBlues, drawStar } from './entities/powerups.js';
+import { makeBlue, updateBlues, driftBlues, drawStar, drawStarSpecks } from './entities/powerups.js';
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -157,8 +159,22 @@ const floaters = createFloaters();
 const sparkles = createSparkles();
 const dustPuffs = createDustPuffs();
 
+const isProbablyMobile = () => {
+  if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean') {
+    return navigator.userAgentData.mobile;
+  }
+  const ua = navigator.userAgent || '';
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobi/i.test(ua);
+};
+
+const quality = { dprCap: 2 };
+const updateQuality = () => {
+  quality.dprCap = isProbablyMobile() ? 1.5 : 2;
+};
+
 const resize = () => {
-  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  updateQuality();
+  const dpr = Math.max(1, Math.min(quality.dprCap, window.devicePixelRatio || 1));
   canvas.width = Math.floor(innerWidth * dpr);
   canvas.height = Math.floor(innerHeight * dpr);
   canvas.style.width = innerWidth + 'px';
@@ -325,6 +341,7 @@ const encounterQueue = [];
 let forceEdibleNext = false;
 
 const starsFar = makeStars(70, rand);
+const bgCache = createBackgroundCache();
 let scrollX = 0;
 
 const screenAnim = { active: false, t: 0, dur: 0.45 };
@@ -2141,26 +2158,7 @@ const draw = () => {
   const w = innerWidth;
   const h = innerHeight;
   ctx.clearRect(0, 0, w, h);
-  const bossOutroLocked = bossOutro.active
-    && bossOutro.phase !== 'white_in'
-    && bossOutro.phase !== 'white_hold'
-    && bossOutro.phase !== 'white_out';
-  const showWorldEntities = !bossOutro.blackBackdrop;
-  const showPlayer = showWorldEntities || bossOutro.active;
-
-  const useBlackBackdrop = bossOutro.blackBackdrop || gameState.value === 'stageclear' || gameState.value === 'gameoverFinal';
-  const bgScrollX = (gameState.value === 'start' || gameState.value === 'startTransition')
-    ? menuScrollX
-    : scrollX + menuScrollX;
-
-  if (useBlackBackdrop) {
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, w, h);
-  } else {
-    drawSky(ctx, w, h);
-    drawStars(ctx, starsFar, 0.05, bgScrollX, groundY(), w);
-    drawHills(ctx, w, groundY(), bgScrollX);
-  }
+  const bgScrollX = drawBackdrop(ctx, w, h, groundY(), scrollX, menuScrollX, gameState.value, bossOutro.blackBackdrop, starsFar, bgCache);
 
   const shakeAmp = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode')) ? 6 : 0;
   if (shakeAmp > 0) {
@@ -2172,124 +2170,11 @@ const draw = () => {
     drawGround(ctx, groundY(), w, h, bgScrollX);
   }
 
-  const showEntities = !(gameState.value === 'start' || gameState.value === 'startTransition' || gameState.value === 'stageclear' || gameState.value === 'gameoverFinal');
-  if (showEntities) {
-    const fadeEntitiesAlpha = finishFadeEntities.active
-      ? (1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)))
-      : 1;
-
-    if (!bossOutro.blackBackdrop) drawCheckpointFlags(ctx, w);
-
-    if (showWorldEntities) {
-      if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
-      for (const o of reds) {
-        drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
-      }
-      if (fadeEntitiesAlpha < 1) ctx.restore();
-
-      if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
-      for (const o of blues) {
-        ctx.fillStyle = '#ffbf4a';
-        drawStar(ctx, o.x, o.y, Math.max(0, o.r), o.specks, waveT);
-      }
-      if (fadeEntitiesAlpha < 1) ctx.restore();
-
-      drawDustPuffs(ctx, dustPuffs, lerp);
-
-      if (showPlayer && (gameState.value === 'playing' || gameState.value === 'cutscene') && player.r > 0.3 && player._beingEaten) {
-        drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
-      }
-
-      if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;
-      for (const n of npcs) {
-        drawCharacter(ctx, n.x, n.y, n.r, n.mouth.dir, n.mouth.open, n.emotion, 1, clamp, lerp);
-      }
-      if (fadeEntitiesAlpha < 1) ctx.restore();
-
-    }
-
-    if (showPlayer && (gameState.value === 'playing' || gameState.value === 'cutscene') && player.r > 0.3 && !player._beingEaten) {
-      drawPlayer2(ctx, player.x, player.y, player.r, player.mouth.dir, player.mouth.open, player.squashY, DEFAULT_PALETTE, false, true, { t: player.wingT });
-    }
-
-    const showBossNow = (gameState.value === 'cutscene' || (gameState.value === 'dying' && showHealthBar));
-    if (showBossNow && !(bossOutro.active && bossOutro.bossGone) && (showWorldEntities || bossOutro.active)) {
-      const bossJitter = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode'))
-        ? { x: rand(-2, 2), y: rand(-2, 2) }
-        : { x: 0, y: 0 };
-      const bossFlip = bossOutro.active
-        && bossOutro.phase !== 'white_in'
-        && bossOutro.phase !== 'white_hold';
-      drawPlayer2(ctx, boss.x + bossJitter.x, boss.y + bossJitter.y, boss.r, 0, boss.mouth, boss.squashY, BOSS_PALETTE, bossFlip, true, { t: boss.wingT });
-    }
-
-    if (showWorldEntities || bossOutroLocked) {
-      drawFloaters(ctx, floaters, clamp);
-
-      if (burst.active) drawBurst(ctx, burst, lerp);
-      if (headShatter.active) drawShatter(ctx, headShatter);
-      if (npcShatter.active) drawShatter(ctx, npcShatter);
-      drawSparkles(ctx, sparkles);
-      if (lineBurst.active) drawLineBurst(ctx, lineBurst, lerp);
-    }
-    for (const b of bossExplosions) {
-      if (b.active) drawLineBurst(ctx, b, lerp);
-    }
-  }
+  drawWorldEntities(ctx, w, h, renderState, worldRenderDeps);
 
   if (shakeAmp > 0) ctx.restore();
 
-  if (!cinematicUiHidden) {
-    const uiFade = finishFadeEntities.active
-      ? (1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)))
-      : (scoreFade.active ? easeInOut(clamp(scoreFade.t / scoreFade.dur, 0, 1)) : 1);
-    const showBossUi = showHealthBar && (gameState.value === 'cutscene' || gameState.value === 'playing' || gameState.value === 'dying');
-    if ((gameState.value === 'playing' || gameState.value === 'dying') && !showBossUi) {
-      if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
-      drawProgressBar(ctx, w);
-      if (uiFade < 1) ctx.restore();
-    }
-    if (showBossUi) {
-      if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
-      drawHealthBar(ctx);
-      setBossTimerVisible(false);
-      if (uiFade < 1) ctx.restore();
-    } else {
-      setBossTimerVisible(false);
-    }
-
-    if (checkpointToastT > 0 && !(gameState.value === 'cutscene' && !showHealthBar)) {
-      ctx.save();
-      ctx.globalAlpha = uiFade;
-      ctx.font = '15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#e44c4c';
-      const text = 'CHECKPOINT REACHED';
-      const gy = groundY();
-      const tx = w * 0.5;
-      const ty = gy + (h - gy) * 0.5;
-      ctx.fillText(text, tx, ty);
-      ctx.restore();
-    }
-
-    const showHearts = (
-      gameState.value === 'playing'
-      || gameState.value === 'dying'
-      || gameState.value === 'paused'
-      || (gameState.value === 'cutscene' && showHealthBar)
-    );
-    if (showHearts) {
-      if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
-      drawLivesHud(ctx, w);
-      if (uiFade < 1) ctx.restore();
-    }
-  }
-  if (cinematicUiHidden) setBossTimerVisible(false);
-
-  if (isDialogueActive() && dialogueIndex < dialogueScript.length) {
-    drawDialogueBox(ctx, w, h);
-  }
+  drawUI(ctx, w, h, renderState, uiRenderDeps);
 
   if (debugHUD) {
     const d = difficulty01();
@@ -2834,6 +2719,65 @@ const drawProgressBar = (ctx, w) => {
   ctx.stroke();
 
   ctx.restore();
+};
+
+const renderState = {
+  gameState,
+  bossOutro,
+  boss,
+  player,
+  npcs,
+  reds,
+  blues,
+  burst,
+  headShatter,
+  npcShatter,
+  lineBurst,
+  bossExplosions,
+  floaters,
+  sparkles,
+  dustPuffs,
+  finishFadeEntities,
+  scoreFade,
+  get waveT() { return waveT; },
+  get showHealthBar() { return showHealthBar; },
+  get cinematicUiHidden() { return cinematicUiHidden; },
+  get checkpointToastT() { return checkpointToastT; },
+  get dialogueIndex() { return dialogueIndex; },
+  get dialogueScriptLength() { return dialogueScript.length; },
+};
+
+const worldRenderDeps = {
+  drawCheckpointFlags,
+  drawDynamiteBomb,
+  drawStar,
+  drawStarSpecks,
+  drawCharacter,
+  drawPlayer2,
+  DEFAULT_PALETTE,
+  BOSS_PALETTE,
+  drawDustPuffs,
+  drawFloaters,
+  drawBurst,
+  drawShatter,
+  drawSparkles,
+  drawLineBurst,
+  lerp,
+  clamp,
+  easeInOut,
+  rand,
+};
+
+const uiRenderDeps = {
+  groundY,
+  setBossTimerVisible,
+  drawProgressBar,
+  drawHealthBar,
+  drawLivesHud,
+  drawDialogueBox,
+  isDialogueActive,
+  clamp,
+  easeInOut,
 };
 
 requestAnimationFrame(tick);

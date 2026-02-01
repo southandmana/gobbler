@@ -2,6 +2,20 @@ import { clamp, lerp } from '../utils/math.js';
 
 const player2Canvas = document.createElement('canvas');
 const player2Ctx = player2Canvas.getContext('2d');
+const spriteCache = new Map();
+const paletteIds = new WeakMap();
+let paletteIdSeq = 1;
+
+const getPaletteId = (palette) => {
+  if (!paletteIds.has(palette)) paletteIds.set(palette, paletteIdSeq++);
+  return paletteIds.get(palette);
+};
+
+const getWingFrame = (wing) => {
+  if (!wing) return -1;
+  const t = (wing.t || 0) % 1;
+  return Math.floor(t * 2) % 2;
+};
 export const DEFAULT_PALETTE = {
   body: '#f2d36a',
   bodyAccent: '#e9c85f',
@@ -27,20 +41,9 @@ export const createPlayer = (baseR) => ({
   wingT: 0,
 });
 
-export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette = DEFAULT_PALETTE, flipX = false, rotate = true, wing = null) => {
-  if (!(r > 0.01)) return;
+const renderPlayerSprite = (pctx, size, r, palette, open01, wingFrame) => {
   const o = clamp(open01, 0, 1);
   const { body, bodyAccent, lips, eye, outline } = palette;
-
-  const pad = r * 0.35;
-  const size = Math.ceil(r * 2 + pad * 2);
-  if (size <= 0) return;
-  if (player2Canvas.width !== size) {
-    player2Canvas.width = size;
-    player2Canvas.height = size;
-  }
-
-  const pctx = player2Ctx;
   pctx.setTransform(1, 0, 0, 1, 0, 0);
   pctx.clearRect(0, 0, size, size);
   pctx.translate(size * 0.5, size * 0.5);
@@ -58,7 +61,7 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
     pctx.stroke();
   }
 
-  if (wing) {
+  if (wingFrame >= 0) {
     // Wing-like mark on the head (procedural 2-frame flipbook).
     const wingW = r * 0.95;
     const wingH = r * 0.6;
@@ -67,9 +70,7 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
       { rot: -1.05, ty: 0.38 },
       { rot: -0.2, ty: 0.14 },
     ];
-    const t = (wing.t || 0) % 1;
-    const idx = Math.floor(t * frames.length) % frames.length;
-    const f = frames[idx];
+    const f = frames[wingFrame] || frames[0];
     pctx.save();
     pctx.translate(tx, r * f.ty);
     pctx.rotate(f.rot);
@@ -138,12 +139,45 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
     pctx.stroke();
   }
 
+};
+
+export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette = DEFAULT_PALETTE, flipX = false, rotate = true, wing = null) => {
+  if (!(r > 0.01)) return;
+  const o = clamp(open01, 0, 1);
+  const pad = r * 0.35;
+  const size = Math.ceil(r * 2 + pad * 2);
+  if (size <= 0) return;
+
+  const wingFrame = getWingFrame(wing);
+  const isClosed = o < 0.08;
+  let sourceCanvas = player2Canvas;
+
+  if (isClosed) {
+    const paletteId = getPaletteId(palette);
+    const key = `${size}|${r}|${paletteId}|${wingFrame}`;
+    let cached = spriteCache.get(key);
+    if (!cached) {
+      cached = document.createElement('canvas');
+      cached.width = size;
+      cached.height = size;
+      renderPlayerSprite(cached.getContext('2d'), size, r, palette, 0, wingFrame);
+      spriteCache.set(key, cached);
+    }
+    sourceCanvas = cached;
+  } else {
+    if (player2Canvas.width !== size) {
+      player2Canvas.width = size;
+      player2Canvas.height = size;
+    }
+    renderPlayerSprite(player2Ctx, size, r, palette, o, wingFrame);
+  }
+
   ctx.save();
   ctx.translate(x, y);
   if (squashY !== 1) ctx.scale(1, squashY);
   if (flipX) ctx.scale(-1, 1);
   if (rotate) ctx.rotate(dirRad);
-  ctx.drawImage(player2Canvas, -size * 0.5, -size * 0.5, size, size);
+  ctx.drawImage(sourceCanvas, -size * 0.5, -size * 0.5, size, size);
   ctx.restore();
 };
 
