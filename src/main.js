@@ -63,6 +63,11 @@ let startMenuPressedId = null;
 let startMenuHidden = false;
 let startMenuKeepId = null;
 const START_MENU_NPC_SPEED = 360;
+const START_MENU_NPC_BOUNCES = 3;
+const START_MENU_NPC_BOUNCE_VY = -340;
+const START_MENU_NPC_GRAVITY = 900;
+const START_MENU_NPC_BITE_SNAP = 0.12;
+const START_MENU_BOMB_POP_DUR = 0.12;
 const START_MENU_NPC_JUMP_VX = -260;
 const START_MENU_NPC_JUMP_VY = -420;
 const START_MENU_SHAKE_DUR = 0.25;
@@ -70,7 +75,23 @@ const START_MENU_SHAKE_AMP = 3;
 const START_MENU_BOMB_SCALE = 0.6;
 let startMenuBoom = 0;
 const startMenuBomb = { active: false, state: 'idle', x: 0, y: 0, r: 0, x0: 0, y0: 0, r0: 0, t: 0 };
-const startMenuNpc = { active: false, state: 'idle', x: 0, y: 0, r: 0, vx: 0, vy: 0, t: 0, mouth: { open: 0, dir: 0, pulseT: 1, pulseDur: MOUTH.pulseDur, cooldown: 0 } };
+const startMenuBombPop = { active: false, t: 0 };
+const startMenuNpc = {
+  active: false,
+  state: 'idle',
+  x: 0,
+  y: 0,
+  r: 0,
+  vx: 0,
+  vy: 0,
+  t: 0,
+  baseY: 0,
+  bounceLeft: 0,
+  jumpReady: false,
+  biteT: 0,
+  biteDir: Math.PI,
+  mouth: { open: 0, dir: 0, pulseT: 1, pulseDur: MOUTH.pulseDur, cooldown: 0 },
+};
 const dialogueSpeed = 38;
 const dialogueMouth = { t: 0, min: 0.18, max: 0.48, speed: 30 };
 const scoreFade = { active: false, t: 0, dur: 0.6 };
@@ -672,8 +693,13 @@ const beginStartScreen = () => {
   startMenuBomb.active = false;
   startMenuBomb.state = 'idle';
   startMenuBomb.t = 0;
+  startMenuBombPop.active = false;
+  startMenuBombPop.t = 0;
   startMenuNpc.active = false;
   startMenuNpc.state = 'idle';
+  startMenuNpc.bounceLeft = 0;
+  startMenuNpc.jumpReady = false;
+  startMenuNpc.biteT = 0;
   startMenuBurst.active = false;
   startMenuBurst.t = 0;
   startMenuBurst.particles.length = 0;
@@ -1115,7 +1141,7 @@ const startStartTransition = (scrollOnly = false) => {
     startTitleHidden = true;
     startTitleFade = 1;
     startScrollPending = true;
-    startScrollDelay = 1.0;
+    startScrollDelay = 0;
   } else {
     screenAnim.active = true;
     screenAnim.t = 0;
@@ -1148,6 +1174,8 @@ const startStoryBombSequence = (button) => {
   startMenuBomb.active = true;
   startMenuBomb.state = 'idle';
   startMenuBomb.t = 0;
+  startMenuBombPop.active = true;
+  startMenuBombPop.t = 0;
   startMenuBomb.x = button.x + button.w * 0.5;
   startMenuBomb.y = button.y + button.h * 0.5;
   startMenuBomb.r = Math.max(18, button.h * START_MENU_BOMB_SCALE);
@@ -1164,10 +1192,15 @@ const startStoryBombSequence = (button) => {
   startMenuNpc.state = 'enter';
   startMenuNpc.r = Math.max(16, button.h * 0.55);
   startMenuNpc.x = innerWidth + startMenuNpc.r + 40;
-  startMenuNpc.y = startMenuBomb.y + startMenuNpc.r * 0.15;
+  startMenuNpc.baseY = startMenuBomb.y + startMenuNpc.r * 0.15;
+  startMenuNpc.y = startMenuNpc.baseY;
   startMenuNpc.vx = -Math.max(START_MENU_NPC_SPEED, innerWidth * 0.45);
   startMenuNpc.vy = 0;
   startMenuNpc.t = 0;
+  startMenuNpc.bounceLeft = START_MENU_NPC_BOUNCES;
+  startMenuNpc.jumpReady = true;
+  startMenuNpc.biteT = 0;
+  startMenuNpc.biteDir = Math.PI;
   startMenuNpc.mouth.open = 0;
   startMenuNpc.mouth.dir = Math.PI;
   startMenuNpc.mouth.pulseT = 1;
@@ -1192,7 +1225,7 @@ const triggerStartMenuExplosion = () => {
   playEatBombSfx();
   playBossExplosionSfx();
   startGamePending = true;
-  startGameDelay = 2.0;
+  startGameDelay = 1.0;
 };
 
 const startRestartTransition = () => {
@@ -1706,6 +1739,10 @@ addEventListener('pointerdown', (ev) => {
       for (const b of buttons) {
         if (x >= b.x && x <= b.x + b.w && yAdjusted >= b.y && yAdjusted <= b.y + b.h) {
           startMenuPressedId = b.id;
+          if (b.id === 'story') {
+            startMode = 'story';
+            startStoryBombSequence(b);
+          }
           return;
         }
       }
@@ -1735,21 +1772,6 @@ addEventListener('pointerdown', (ev) => {
 
 addEventListener('pointerup', (ev) => {
   if (gameState.value === 'start') {
-    if (!screenAnim.active && startViewSettled && startMenuPressedId) {
-      const buttons = getStartMenuButtons(innerWidth, innerHeight);
-      const { x, y } = toCanvasXY(ev);
-      const yAdjusted = y - getStartViewOffset();
-      for (const b of buttons) {
-        if (b.id !== startMenuPressedId) continue;
-        if (x >= b.x && x <= b.x + b.w && yAdjusted >= b.y && yAdjusted <= b.y + b.h) {
-          if (b.id === 'story') {
-            startMode = 'story';
-            startStoryBombSequence(b);
-          }
-        }
-        break;
-      }
-    }
     startMenuPressedId = null;
   }
   if (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) inputRelease();
@@ -1791,20 +1813,51 @@ const tick = (now) => {
   if (startMenuBoom > 0) {
     startMenuBoom = Math.max(0, startMenuBoom - dt);
   }
+  if (startMenuBombPop.active) {
+    startMenuBombPop.t = Math.min(1, startMenuBombPop.t + dt / START_MENU_BOMB_POP_DUR);
+    if (startMenuBombPop.t >= 1) startMenuBombPop.active = false;
+  }
   if (startMenuBurst.active) updateBurst(startMenuBurst, dt, clamp);
   if (startMenuLineBurst.active) updateLineBurst(startMenuLineBurst, dt, clamp);
   if (startMenuNpcShatter.active) updateShatter(startMenuNpcShatter, dt);
   if (startMenuNpc.active && (gameState.value === 'start' || gameState.value === 'startTransition')) {
-    startMenuNpc.mouth.dir = Math.PI;
+    const targetAngle = startMenuBomb.active
+      ? Math.atan2(startMenuBomb.y - startMenuNpc.y, startMenuBomb.x - startMenuNpc.x)
+      : Math.PI;
+    if (startMenuNpc.biteT > 0) {
+      startMenuNpc.biteT = Math.max(0, startMenuNpc.biteT - dt);
+      startMenuNpc.mouth.dir = lerpAngle(startMenuNpc.mouth.dir, startMenuNpc.biteDir, 1 - Math.pow(0.000001, dt));
+    } else {
+      startMenuNpc.mouth.dir = lerpAngle(startMenuNpc.mouth.dir, targetAngle, 1 - Math.pow(0.001, dt));
+    }
     updateMouth(startMenuNpc.mouth, dt, MOUTH, clamp);
     if (startMenuNpc.state === 'enter') {
       startMenuNpc.x += startMenuNpc.vx * dt;
       startMenuNpc.t += dt;
+      if (startMenuNpc.jumpReady && startMenuNpc.bounceLeft > 0 && startMenuBomb.active) {
+        const capture = startMenuNpc.r + startMenuBomb.r + EAT.capturePad;
+        const d = dist(startMenuNpc.x, startMenuNpc.y, startMenuBomb.x, startMenuBomb.y);
+        if (d > capture * 1.4) {
+          startMenuNpc.vy = START_MENU_NPC_BOUNCE_VY;
+          startMenuNpc.jumpReady = false;
+          startMenuNpc.bounceLeft -= 1;
+          playJumpSfx();
+        }
+      }
+      startMenuNpc.y += startMenuNpc.vy * dt;
+      startMenuNpc.vy += START_MENU_NPC_GRAVITY * dt;
+      if (startMenuNpc.y >= startMenuNpc.baseY) {
+        startMenuNpc.y = startMenuNpc.baseY;
+        startMenuNpc.vy = 0;
+        startMenuNpc.jumpReady = true;
+      }
       const capture = startMenuNpc.r + startMenuBomb.r + EAT.capturePad;
       const d = dist(startMenuNpc.x, startMenuNpc.y, startMenuBomb.x, startMenuBomb.y);
       if (startMenuBomb.active && d <= capture && startMenuBomb.state === 'idle') {
         startMenuNpc.state = 'bite';
         startMenuNpc.t = 0;
+        startMenuNpc.biteDir = targetAngle;
+        startMenuNpc.biteT = START_MENU_NPC_BITE_SNAP;
         triggerChomp(startMenuNpc.mouth, MOUTH);
         startMenuBomb.state = 'eaten';
         startMenuBomb.t = 0;
@@ -1814,6 +1867,13 @@ const tick = (now) => {
       }
     } else if (startMenuNpc.state === 'bite') {
       startMenuNpc.t += dt;
+      startMenuNpc.x += startMenuNpc.vx * dt;
+      startMenuNpc.y += startMenuNpc.vy * dt;
+      startMenuNpc.vy += START_MENU_NPC_GRAVITY * dt;
+      if (startMenuNpc.y >= startMenuNpc.baseY) {
+        startMenuNpc.y = startMenuNpc.baseY;
+        startMenuNpc.vy = 0;
+      }
     } else if (startMenuNpc.state === 'exit') {
       startMenuNpc.x += startMenuNpc.vx * dt;
       startMenuNpc.y += startMenuNpc.vy * dt;
@@ -2544,7 +2604,7 @@ const draw = () => {
         ? (easeInOut(clamp(screenAnim.t, 0, 1)) * (h * 0.45))
         : 0;
       const tapFontSize = 20;
-      const gapPx = (h * 0.04) + 70;
+      const gapPx = (h * 0.04) + 95;
       if (titleImageReady) {
         const imgW = titleImage.naturalWidth || 0;
         const imgH = titleImage.naturalHeight || 0;
@@ -3136,6 +3196,15 @@ const drawStartMenuChoice = (ctx, w, h, alpha = 1) => {
       if (startMenuHidden && startMenuKeepId === 'story' && b.id === 'story' && !startMenuBomb.active) continue;
       const showBomb = (b.id === 'story' && startMenuBomb.active);
       if (showBomb) {
+        let popScale = 1;
+        if (startMenuBombPop.active) {
+          const t = startMenuBombPop.t;
+          popScale = 1 + Math.sin(Math.PI * t) * 0.14;
+        }
+        ctx.save();
+        ctx.translate(startMenuBomb.x, startMenuBomb.y);
+        ctx.scale(popScale, popScale);
+        ctx.translate(-startMenuBomb.x, -startMenuBomb.y);
         drawDynamiteBomb(ctx, startMenuBomb.x, startMenuBomb.y, startMenuBomb.r);
         ctx.save();
         const baseR = startMenuBomb.r0 || startMenuBomb.r;
@@ -3157,16 +3226,12 @@ const drawStartMenuChoice = (ctx, w, h, alpha = 1) => {
         ctx.strokeText(b.label, startMenuBomb.x, textY);
         ctx.fillText(b.label, startMenuBomb.x, textY);
         ctx.restore();
+        ctx.restore();
         continue;
       }
-      const isPressed = startMenuPressedId === b.id;
-      const scale = isPressed ? 0.96 : 1;
       const cx = b.x + b.w * 0.5;
       const cy = b.y + b.h * 0.5;
       ctx.save();
-      ctx.translate(cx, cy);
-      ctx.scale(scale, scale);
-      ctx.translate(-cx, -cy);
       ctx.fillStyle = '#000';
       ctx.strokeStyle = 'rgba(242, 244, 247, 0.9)';
       ctx.fillRect(b.x, b.y, b.w, b.h);
@@ -3184,7 +3249,7 @@ const drawStartMenuChoice = (ctx, w, h, alpha = 1) => {
     }
   }
   if (startMenuNpc.active) {
-    drawCharacter(ctx, startMenuNpc.x, startMenuNpc.y, startMenuNpc.r, Math.PI, startMenuNpc.mouth.open, 'neutral', 1);
+    drawCharacter(ctx, startMenuNpc.x, startMenuNpc.y, startMenuNpc.r, startMenuNpc.mouth.dir, startMenuNpc.mouth.open, 'neutral', 1);
   }
   if (startMenuNpcShatter.active) drawShatter(ctx, startMenuNpcShatter);
   if (startMenuLineBurst.active) drawLineBurst(ctx, startMenuLineBurst, lerp);
