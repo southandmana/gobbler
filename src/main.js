@@ -49,6 +49,17 @@ let dialogueScript = DIALOGUE_INTRO;
 let dialogueMode = 'intro';
 let dialogueIndex = 0;
 let dialogueChar = 0;
+let startMode = 'story';
+let startViewSettled = false;
+let startScrollOnly = false;
+let startScrollPending = false;
+let startScrollDelay = 0;
+let startTitleHidden = false;
+let startTitleFade = 1;
+const START_TITLE_FADE_DUR = 0.35;
+let startGamePending = false;
+let startGameDelay = 0;
+let startMenuPressedId = null;
 const dialogueSpeed = 38;
 const dialogueMouth = { t: 0, min: 0.18, max: 0.48, speed: 30 };
 const scoreFade = { active: false, t: 0, dur: 0.6 };
@@ -188,6 +199,17 @@ const resize = () => {
 };
 addEventListener('resize', resize);
 resize();
+
+const START_VIEW_OFFSET_RATIO = 1.0;
+const getStartViewOffset = () => {
+  if (gameState.value === 'start') return startViewSettled ? 0 : (innerHeight * START_VIEW_OFFSET_RATIO);
+  if (gameState.value === 'startTransition') {
+    if (!startScrollOnly) return 0;
+    const t = easeInOut(clamp(screenAnim.t, 0, 1));
+    return innerHeight * START_VIEW_OFFSET_RATIO * (1 - t);
+  }
+  return 0;
+};
 
 const groundY = () => innerHeight - WORLD.groundH;
 
@@ -609,6 +631,15 @@ const beginStartScreen = () => {
   bossExplosions.length = 0;
   dialogueScript = DIALOGUE_INTRO;
   dialogueMode = 'intro';
+  startViewSettled = false;
+  startScrollOnly = false;
+  startScrollPending = false;
+  startScrollDelay = 0;
+  startTitleHidden = false;
+  startTitleFade = 1;
+  startGamePending = false;
+  startGameDelay = 0;
+  startMenuPressedId = null;
 };
 
 const beginGame = () => {
@@ -1023,22 +1054,32 @@ const respawnAtCheckpoint = () => {
   playPlayerSpawnsSfx();
 };
 
-const startStartTransition = () => {
-  playStartFromHomeSfx();
-  levelMusic.pending = true;
-  levelMusic.delay = 1.5;
-  levelMusic.fade = 0;
-  levelMusic.fading = false;
-  try {
-    levelMusic.audio.currentTime = 0;
-    levelMusic.audio.volume = levelMusic.baseVol;
-  } catch {
-    // ignore
+const startStartTransition = (scrollOnly = false) => {
+  startScrollOnly = scrollOnly;
+  if (!scrollOnly) {
+    playStartFromHomeSfx();
+    levelMusic.pending = true;
+    levelMusic.delay = 1.5;
+    levelMusic.fade = 0;
+    levelMusic.fading = false;
+    try {
+      levelMusic.audio.currentTime = 0;
+      levelMusic.audio.volume = levelMusic.baseVol;
+    } catch {
+      // ignore
+    }
   }
-  screenAnim.active = true;
-  screenAnim.t = 0;
-  screenAnim.dur = 0.45;
-  gameState.value = 'startTransition';
+  if (scrollOnly) {
+    startTitleHidden = true;
+    startTitleFade = 1;
+    startScrollPending = true;
+    startScrollDelay = 1.0;
+  } else {
+    screenAnim.active = true;
+    screenAnim.t = 0;
+    screenAnim.dur = 0.45;
+    gameState.value = 'startTransition';
+  }
 };
 
 const startRestartTransition = () => {
@@ -1519,7 +1560,9 @@ addEventListener('keydown', (e) => {
   if (cutscenePending) return;
   if (e.code === 'Space') {
     e.preventDefault();
-    if (gameState.value === 'start') startStartTransition();
+    if (gameState.value === 'start') {
+      if (!screenAnim.active && !startViewSettled) startStartTransition(true);
+    }
     else if (gameState.value === 'stageclear') beginStartScreen();
     else if (!finishExit) inputPress();
   }
@@ -1542,7 +1585,21 @@ const toCanvasXY = (ev) => {
 
 addEventListener('pointerdown', (ev) => {
   const { x, y } = toCanvasXY(ev);
-  if (gameState.value === 'start') { startStartTransition(); return; }
+  if (gameState.value === 'start') {
+    if (!screenAnim.active && startViewSettled) {
+      const buttons = getStartMenuButtons(innerWidth, innerHeight);
+      const yAdjusted = y - getStartViewOffset();
+      for (const b of buttons) {
+        if (x >= b.x && x <= b.x + b.w && yAdjusted >= b.y && yAdjusted <= b.y + b.h) {
+          startMenuPressedId = b.id;
+          return;
+        }
+      }
+    }
+    startMenuPressedId = null;
+    if (!screenAnim.active && !startViewSettled) startStartTransition(true);
+    return;
+  }
   if (gameState.value === 'stageclear') { beginStartScreen(); return; }
   if (gameState.value === 'gameover') {
     if (resumeDelay.active) return;
@@ -1562,10 +1619,30 @@ addEventListener('pointerdown', (ev) => {
   inputPress();
 });
 
-addEventListener('pointerup', () => {
+addEventListener('pointerup', (ev) => {
+  if (gameState.value === 'start') {
+    if (!screenAnim.active && startViewSettled && startMenuPressedId) {
+      const buttons = getStartMenuButtons(innerWidth, innerHeight);
+      const { x, y } = toCanvasXY(ev);
+      const yAdjusted = y - getStartViewOffset();
+      for (const b of buttons) {
+        if (b.id !== startMenuPressedId) continue;
+        if (x >= b.x && x <= b.x + b.w && yAdjusted >= b.y && yAdjusted <= b.y + b.h) {
+          if (b.id === 'story') {
+            startMode = 'story';
+            startGamePending = true;
+            startGameDelay = 2.0;
+          }
+        }
+        break;
+      }
+    }
+    startMenuPressedId = null;
+  }
   if (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) inputRelease();
 });
 addEventListener('pointercancel', () => {
+  if (gameState.value === 'start') startMenuPressedId = null;
   if (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) inputRelease();
 });
 addEventListener('blur', () => { inputRelease(); });
@@ -1577,6 +1654,27 @@ playHomeStartSfx();
 const tick = (now) => {
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
+
+  if (startScrollPending && gameState.value === 'start') {
+    startScrollDelay = Math.max(0, startScrollDelay - dt);
+    if (startScrollDelay <= 0) {
+      startScrollPending = false;
+      screenAnim.active = true;
+      screenAnim.t = 0;
+      screenAnim.dur = 0.45;
+      gameState.value = 'startTransition';
+    }
+  }
+  if (startGamePending && gameState.value === 'start' && !screenAnim.active) {
+    startGameDelay = Math.max(0, startGameDelay - dt);
+    if (startGameDelay <= 0) {
+      startGamePending = false;
+      startStartTransition(false);
+    }
+  }
+  if (startTitleHidden && startTitleFade > 0) {
+    startTitleFade = Math.max(0, startTitleFade - (dt / START_TITLE_FADE_DUR));
+  }
 
   if (gameState.value === 'paused') {
     draw();
@@ -1652,7 +1750,16 @@ const tick = (now) => {
   if (screenAnim.active) {
     screenAnim.t = clamp(screenAnim.t + dt / screenAnim.dur, 0, 1);
     if (screenAnim.t >= 1) {
-      if (gameState.value === 'startTransition') { screenAnim.active = false; beginGame(); }
+      if (gameState.value === 'startTransition') {
+        screenAnim.active = false;
+        if (startScrollOnly) {
+          startViewSettled = true;
+          startScrollOnly = false;
+          gameState.value = 'start';
+        } else {
+          beginGame();
+        }
+      }
       else if (gameState.value === 'restartTransition') { screenAnim.active = false; beginGame(); }
       else screenAnim.active = false;
     }
@@ -2163,7 +2270,9 @@ const draw = () => {
   const w = innerWidth;
   const h = innerHeight;
   ctx.clearRect(0, 0, w, h);
-  const bgScrollX = drawBackdrop(ctx, w, h, groundY(), scrollX, menuScrollX, gameState.value, bossOutro.blackBackdrop, starsFar, bgCache);
+  const startOffset = getStartViewOffset();
+  const renderGroundY = groundY() + startOffset;
+  const bgScrollX = drawBackdrop(ctx, w, h, renderGroundY, scrollX, menuScrollX, gameState.value, bossOutro.blackBackdrop, starsFar, bgCache);
 
   const shakeAmp = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode')) ? 6 : 0;
   if (shakeAmp > 0) {
@@ -2172,7 +2281,7 @@ const draw = () => {
   }
 
   if (gameState.value !== 'stageclear' && gameState.value !== 'gameoverFinal') {
-    drawGround(ctx, groundY(), w, h, bgScrollX);
+    drawGround(ctx, renderGroundY, w, h, bgScrollX);
   }
 
   drawWorldEntities(ctx, w, h, renderState, worldRenderDeps);
@@ -2266,38 +2375,56 @@ const draw = () => {
   }
 
   if (gameState.value === 'start' || gameState.value === 'startTransition') {
-    const a = getScreenAlpha();
-    if (titleImageReady) {
-      const imgW = titleImage.naturalWidth || 0;
-      const imgH = titleImage.naturalHeight || 0;
-      if (imgW > 0 && imgH > 0) {
-        const scale = 0.5;
-        const drawW = imgW * scale;
-        const drawH = imgH * scale;
-        const x = (w - drawW) * 0.5;
-        const y = (h * 0.32) - (drawH * 0.5);
+    const baseA = (gameState.value === 'startTransition' && startScrollOnly) ? 1 : getScreenAlpha();
+    const titleA = baseA * (startTitleHidden ? startTitleFade : 1);
+    if (!startViewSettled) {
+      const titleSlide = (gameState.value === 'startTransition' && startScrollOnly)
+        ? (easeInOut(clamp(screenAnim.t, 0, 1)) * (h * 0.45))
+        : 0;
+      const tapFontSize = 20;
+      const gapPx = (h * 0.04) + 70;
+      if (titleImageReady) {
+        const imgW = titleImage.naturalWidth || 0;
+        const imgH = titleImage.naturalHeight || 0;
+        if (imgW > 0 && imgH > 0) {
+          const scale = 0.5;
+          const drawW = imgW * scale;
+          const drawH = imgH * scale;
+          const x = (w - drawW) * 0.5;
+          const groupTop = (h * 0.5) - ((drawH + gapPx + tapFontSize) * 0.5);
+          const y = groupTop + (drawH * 0.5) - titleSlide;
+          ctx.save();
+          ctx.globalAlpha = titleA;
+          ctx.drawImage(titleImage, x, y, drawW, drawH);
+          ctx.restore();
+        }
+      } else {
+        const groupTop = (h * 0.5) - ((54 + gapPx + tapFontSize) * 0.5);
         ctx.save();
-        ctx.globalAlpha = a;
-        ctx.drawImage(titleImage, x, y, drawW, drawH);
+        ctx.translate(0, -titleSlide + (groupTop - (h * 0.5)));
+        drawScreenText(ctx, w, h, "FOR DUCK'S SAKE", '', '', titleA);
         ctx.restore();
       }
-    } else {
-      drawScreenText(ctx, w, h, "FOR DUCK'S SAKE", '', '', a);
-    }
 
+      ctx.save();
+      const tapA = startTitleHidden ? 0 : baseA;
+      ctx.globalAlpha = tapA;
+      ctx.fillStyle = 'rgba(242, 244, 247, 1)';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `600 ${tapFontSize}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+      ctx.lineWidth = 4;
+      const subY = (h * 0.5) + ((gapPx + tapFontSize) * 0.5) - titleSlide;
+      ctx.strokeText('TAP TO START', w * 0.5, subY);
+      ctx.fillText('TAP TO START', w * 0.5, subY);
+      ctx.restore();
+    }
     ctx.save();
-    ctx.globalAlpha = a;
-    ctx.fillStyle = 'rgba(242, 244, 247, 1)';
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = '600 20px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-    ctx.lineWidth = 4;
-    const subY = (h * 0.32) + 110;
-    ctx.strokeText('TAP TO START', w * 0.5, subY);
-    ctx.fillText('TAP TO START', w * 0.5, subY);
+    ctx.translate(0, getStartViewOffset());
+    drawStartMenuChoice(ctx, w, h, baseA);
     ctx.restore();
   } else if (gameState.value === 'gameover') {
     drawGameOverChoice(ctx, w, h);
@@ -2815,6 +2942,55 @@ const uiRenderDeps = {
   isDialogueActive,
   clamp,
   easeInOut,
+};
+
+const getStartMenuButtons = (w, h) => {
+  const btnW = Math.min(520, w * 0.72);
+  const btnH = 44;
+  const gapY = 14;
+  const totalH = btnH * 4 + gapY * 3;
+  const x0 = (w - btnW) * 0.5;
+  const y0 = (h - totalH) * 0.5;
+  return [
+    { id: 'story', label: 'STORY', x: x0, y: y0, w: btnW, h: btnH },
+    { id: 'arcade', label: 'ARCADE', x: x0, y: y0 + (btnH + gapY), w: btnW, h: btnH },
+    { id: 'vs', label: 'VS', x: x0, y: y0 + (btnH + gapY) * 2, w: btnW, h: btnH },
+    { id: 'leaderboards', label: 'LEADERBOARDS', x: x0, y: y0 + (btnH + gapY) * 3, w: btnW, h: btnH },
+  ];
+};
+
+const drawStartMenuChoice = (ctx, w, h, alpha = 1) => {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3;
+
+  const buttons = getStartMenuButtons(w, h);
+  for (const b of buttons) {
+    const isPressed = startMenuPressedId === b.id;
+    const scale = isPressed ? 0.96 : 1;
+    const cx = b.x + b.w * 0.5;
+    const cy = b.y + b.h * 0.5;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.translate(-cx, -cy);
+    ctx.fillStyle = '#000';
+    ctx.strokeStyle = 'rgba(242, 244, 247, 0.9)';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle = '#f2f4f7';
+    let fontSize = 16;
+    ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    while (ctx.measureText(b.label).width > b.w - 16 && fontSize > 11) {
+      fontSize -= 1;
+      ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    }
+    ctx.fillText(b.label, b.x + b.w * 0.5, b.y + b.h * 0.56);
+    ctx.restore();
+  }
+  ctx.restore();
 };
 
 requestAnimationFrame(tick);
