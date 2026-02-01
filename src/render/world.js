@@ -55,7 +55,7 @@ export const drawWorldEntities = (ctx, w, h, state, deps) => {
     ? (1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)))
     : 1;
 
-  if (showWorldEntities) drawCheckpointFlags(ctx, w);
+  if (showWorldEntities && state.startMode !== 'arcade') drawCheckpointFlags(ctx, w);
 
   if (showWorldEntities) {
     if (fadeEntitiesAlpha < 1) ctx.save(), ctx.globalAlpha = fadeEntitiesAlpha;

@@ -50,6 +50,7 @@ let dialogueMode = 'intro';
 let dialogueIndex = 0;
 let dialogueChar = 0;
 let startMode = 'story';
+const isArcade = () => startMode === 'arcade';
 const SPLASH_COMPANY_DUR = 2.5;
 const SPLASH_LOADING_DUR = 3.5;
 const SPLASH_FADE_DUR = 0.35;
@@ -986,6 +987,10 @@ const triggerBossOutroSkip = () => {
 };
 
 const respawnAtCheckpoint = () => {
+  if (isArcade()) {
+    beginGame();
+    return;
+  }
   if (diedInBoss) {
     diedInBoss = false;
     const cpScore = (bossCheckpointScore != null) ? bossCheckpointScore : score;
@@ -1303,6 +1308,7 @@ const startRestartTransition = () => {
 };
 
 const updateCheckpointProgress = () => {
+  if (isArcade()) return;
   const nextIdx = checkpointIndex + 1;
   if (nextIdx >= checkpointXs.length) return;
   if (scrollX >= checkpointXs[nextIdx]) {
@@ -1824,6 +1830,9 @@ addEventListener('pointerdown', (ev) => {
           if (b.id === 'story') {
             startMode = 'story';
             startStoryBombSequence(b);
+          } else if (b.id === 'arcade') {
+            startMode = 'arcade';
+            startStartTransition(false);
           }
           return;
         }
@@ -2159,7 +2168,7 @@ const tick = (now) => {
   const activePlay = (gameState.value === 'playing' || bossPhase || bossOutroInvulnerable) && !bossOutroLocked;
 
   if (gameState.value === 'playing' || gameState.value === 'cutscene') {
-    const maxScroll = (gameState.value === 'cutscene') ? Infinity : finishStopX;
+    const maxScroll = (gameState.value === 'cutscene' || isArcade()) ? Infinity : finishStopX;
     const baseMove = Math.max(0, Math.min(WORLD.speed * dt, maxScroll - scrollX));
     const move = bossOutroPoseLocked ? 0 : baseMove;
     if (bossOutroPoseLocked) scrollX = bossOutro.anchorScrollX;
@@ -2173,7 +2182,7 @@ const tick = (now) => {
     if (!finishExit && !cutscenePending && activePlay) updateTrail(dt);
     updateCheckpointProgress();
 
-    if (gameState.value === 'playing' && !finishExit && scrollX >= finishStopX - 1) {
+    if (!isArcade() && gameState.value === 'playing' && !finishExit && scrollX >= finishStopX - 1) {
       finishExit = true;
       inputHeld = false;
       player.squashTarget = 1;
@@ -3306,6 +3315,7 @@ const drawProgressBar = (ctx, w) => {
 
 const renderState = {
   gameState,
+  get startMode() { return startMode; },
   bossOutro,
   boss,
   player,

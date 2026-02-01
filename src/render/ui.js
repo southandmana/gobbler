@@ -6,6 +6,7 @@ export const drawUI = (ctx, w, h, state, deps) => {
     showHealthBar,
     cinematicUiHidden,
     checkpointToastT,
+    startMode,
     dialogueIndex,
     dialogueScriptLength,
   } = state;
@@ -26,7 +27,8 @@ export const drawUI = (ctx, w, h, state, deps) => {
       ? (1 - easeInOut(clamp(finishFadeEntities.t / finishFadeEntities.dur, 0, 1)))
       : (scoreFade.active ? easeInOut(clamp(scoreFade.t / scoreFade.dur, 0, 1)) : 1);
     const showBossUi = showHealthBar && (gameStateValue === 'cutscene' || gameStateValue === 'playing' || gameStateValue === 'dying');
-    if ((gameStateValue === 'playing' || gameStateValue === 'dying') && !showBossUi) {
+    const isArcade = startMode === 'arcade';
+    if ((gameStateValue === 'playing' || gameStateValue === 'dying') && !showBossUi && !isArcade) {
       if (uiFade < 1) ctx.save(), ctx.globalAlpha = uiFade;
       drawProgressBar(ctx, w);
       if (uiFade < 1) ctx.restore();
@@ -40,7 +42,7 @@ export const drawUI = (ctx, w, h, state, deps) => {
       setBossTimerVisible(false);
     }
 
-    if (checkpointToastT > 0 && !(gameStateValue === 'cutscene' && !showHealthBar)) {
+    if (!isArcade && checkpointToastT > 0 && !(gameStateValue === 'cutscene' && !showHealthBar)) {
       ctx.save();
       ctx.globalAlpha = uiFade;
       ctx.font = '15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
