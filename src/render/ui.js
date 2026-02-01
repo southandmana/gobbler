@@ -44,13 +44,21 @@ export const drawUI = (ctx, w, h, state, deps) => {
       ctx.save();
       ctx.globalAlpha = uiFade;
       ctx.font = '15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-      ctx.textAlign = 'center';
+      ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#e44c4c';
       const text = 'CHECKPOINT REACHED';
-      const gy = groundY();
-      const tx = w * 0.5;
-      const ty = gy + (h - gy) * 0.5;
+      const metrics = ctx.measureText(text);
+      const textW = metrics.width;
+      const textH = 18;
+      const padX = 0;
+      const padY = 0;
+      const margin = 0;
+      const tx = w - margin - padX;
+      const ty = h - margin - (textH * 0.5) - padY;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(tx - textW - padX, ty - (textH * 0.5) - padY, textW + padX * 2, textH + padY * 2);
+      ctx.fillStyle = '#fff';
       ctx.fillText(text, tx, ty);
       ctx.restore();
     }

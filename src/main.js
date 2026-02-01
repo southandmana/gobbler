@@ -2629,6 +2629,7 @@ const draw = () => {
       }
 
       ctx.save();
+      const tapScale = 1 + Math.sin(waveT * 4.8) * 0.08;
       const tapA = startTitleHidden ? 0 : baseA;
       ctx.globalAlpha = tapA;
       ctx.fillStyle = 'rgba(242, 244, 247, 1)';
@@ -2640,8 +2641,13 @@ const draw = () => {
       ctx.font = `600 ${tapFontSize}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
       ctx.lineWidth = 4;
       const subY = (h * 0.5) + ((gapPx + tapFontSize) * 0.5) - titleSlide;
+      ctx.save();
+      ctx.translate(w * 0.5, subY);
+      ctx.scale(tapScale, tapScale);
+      ctx.translate(-w * 0.5, -subY);
       ctx.strokeText('TAP TO START', w * 0.5, subY);
       ctx.fillText('TAP TO START', w * 0.5, subY);
+      ctx.restore();
       ctx.restore();
     }
     ctx.save();
