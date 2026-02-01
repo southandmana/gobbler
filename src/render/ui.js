@@ -6,6 +6,8 @@ export const drawUI = (ctx, w, h, state, deps) => {
     showHealthBar,
     cinematicUiHidden,
     checkpointToastT,
+    death100ToastActive,
+    deathCount,
     startMode,
     dialogueIndex,
     dialogueScriptLength,
@@ -62,6 +64,36 @@ export const drawUI = (ctx, w, h, state, deps) => {
       ctx.fillRect(tx - textW - padX, ty - (textH * 0.5) - padY, textW + padX * 2, textH + padY * 2);
       ctx.fillStyle = '#fff';
       ctx.fillText(text, tx, ty);
+      ctx.restore();
+    }
+    if (isArcade && death100ToastActive && deathCount >= 100) {
+      ctx.save();
+      ctx.globalAlpha = uiFade;
+      ctx.font = '15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      const prefix = `YOU DIED ${deathCount} TIMES. `;
+      const suffix = 'NEVER GIVE UP!';
+      const text = `${prefix}${suffix}`;
+      const metrics = ctx.measureText(text);
+      const prefixW = ctx.measureText(prefix).width;
+      const textW = metrics.width;
+      const textH = 18;
+      const padX = 0;
+      const padY = 0;
+      const margin = 0;
+      const tx = w - margin - padX;
+      const startX = tx - textW;
+      const ty = h - margin - (textH * 0.5) - padY;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(startX - padX, ty - (textH * 0.5) - padY, textW + padX * 2, textH + padY * 2);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(prefix, startX, ty);
+      const blinkOn = (Math.floor(performance.now() / 50) % 2) === 0;
+      if (blinkOn) {
+        ctx.fillStyle = '#e44c4c';
+        ctx.fillText(suffix, startX + prefixW, ty);
+      }
       ctx.restore();
     }
 

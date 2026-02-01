@@ -33,14 +33,39 @@ highScoreEl.appendChild(trophyEl);
 highScoreEl.appendChild(highScoreValueEl);
 document.body.appendChild(highScoreEl);
 
-let highScore = 0;
+const rickRollEl = document.createElement('img');
+rickRollEl.src = 'assets/rick_roll.gif';
+rickRollEl.alt = '';
+rickRollEl.setAttribute('aria-hidden', 'true');
+rickRollEl.style.position = 'fixed';
+rickRollEl.style.left = '0';
+rickRollEl.style.bottom = '0';
+rickRollEl.style.width = '64px';
+rickRollEl.style.height = '64px';
+rickRollEl.style.display = 'none';
+rickRollEl.style.pointerEvents = 'none';
+rickRollEl.style.zIndex = '5';
+document.body.appendChild(rickRollEl);
+
+let highScoreStory = 0;
+let highScoreArcade = 0;
 try {
-  const stored = Number.parseInt(localStorage.getItem('gobblerHighScore') || '0', 10);
-  highScore = Number.isFinite(stored) ? stored : 0;
+  const storedArcade = Number.parseInt(localStorage.getItem('gobblerHighScoreArcade') || '0', 10);
+  const storedStory = Number.parseInt(localStorage.getItem('gobblerHighScoreStory') || '0', 10);
+  highScoreArcade = Number.isFinite(storedArcade) ? storedArcade : 0;
+  highScoreStory = Number.isFinite(storedStory) ? storedStory : 0;
+  if (!localStorage.getItem('gobblerHighScoreArcade')) {
+    const legacy = Number.parseInt(localStorage.getItem('gobblerHighScore') || '0', 10);
+    if (Number.isFinite(legacy) && legacy > 0) {
+      highScoreArcade = legacy;
+      localStorage.setItem('gobblerHighScoreArcade', String(legacy));
+    }
+  }
 } catch {
-  highScore = 0;
+  highScoreArcade = 0;
+  highScoreStory = 0;
 }
-highScoreValueEl.textContent = `${highScore} pts`;
+highScoreValueEl.textContent = `${highScoreArcade} pts`;
 
 const gameState = { value: 'start' }; // start | startTransition | playing | paused | dying | gameover | gameoverFinal | restartTransition | cutscene | stageclear
 
@@ -207,6 +232,49 @@ const playBossPopSfx = createSfxPool('assets/sfx/eat_bomb.wav', 4, 0.7);
 const playBossBonusSfx = createSfxPool('assets/sfx/boss_bonus.wav', 2, 0.8);
 const playStageClearedSfx = createSfxPool('assets/sfx/stage_cleared.mp3', 1, 0.8);
 
+const playDied100Sequence = (() => {
+  const first = new Audio('assets/sfx/died_100_times_1.wav');
+  const second = new Audio('assets/sfx/died_100_times_2.mp3');
+  first.preload = 'auto';
+  second.preload = 'auto';
+  second.loop = true;
+  first.volume = 0.8;
+  second.volume = 0.8;
+  let playing = false;
+  return () => {
+    try {
+      first.onended = null;
+      if (playing) {
+        first.pause();
+        second.pause();
+      }
+      playing = true;
+      try {
+        arcadeMusic.audio.pause();
+        arcadeMusic.pending = false;
+        arcadeMusic.fading = false;
+      } catch {
+        // ignore
+      }
+      first.currentTime = 0;
+      second.currentTime = 0;
+      first.onended = () => {
+        playing = false;
+        death100ToastActive = true;
+        try {
+          second.currentTime = 0;
+          second.play();
+        } catch {
+          // ignore autoplay restrictions
+        }
+      };
+      first.play();
+    } catch {
+      // ignore autoplay restrictions
+    }
+  };
+})();
+
 const titleImage = new Image();
 let titleImageReady = false;
 titleImage.onload = () => { titleImageReady = true; };
@@ -224,6 +292,15 @@ loadingImage.src = 'assets/loading_screen.png';
 
 const levelMusic = (() => {
   const audio = new Audio('assets/sfx/level1_part1_music.mp3');
+  audio.preload = 'auto';
+  audio.loop = true;
+  const baseVol = 0.6;
+  audio.volume = baseVol;
+  return { audio, baseVol, pending: false, delay: 0, fade: 0, fadeDur: 0.8, fading: false };
+})();
+
+const arcadeMusic = (() => {
+  const audio = new Audio('assets/sfx/arcade_music.mp3');
   audio.preload = 'auto';
   audio.loop = true;
   const baseVol = 0.6;
@@ -295,10 +372,13 @@ const setScore = (n) => {
   const next = Math.max(0, Math.round(n));
   score = next;
   scoreValueEl.textContent = `${next} pts`;
-  if (next > highScore) {
-    highScore = next;
-    highScoreValueEl.textContent = `${highScore} pts`;
-    try { localStorage.setItem('gobblerHighScore', String(highScore)); } catch {}
+  if (isArcade() && next > highScoreArcade) {
+    highScoreArcade = next;
+    highScoreValueEl.textContent = `${highScoreArcade} pts`;
+    try { localStorage.setItem('gobblerHighScoreArcade', String(highScoreArcade)); } catch {}
+  } else if (!isArcade() && next > highScoreStory) {
+    highScoreStory = next;
+    try { localStorage.setItem('gobblerHighScoreStory', String(highScoreStory)); } catch {}
   }
 };
 const showScore = (show) => {
@@ -310,12 +390,16 @@ const setScoreOpacity = (v) => {
   scoreEl.style.opacity = v;
   highScoreEl.style.opacity = v;
 };
+const setRickRollVisible = (show) => {
+  rickRollEl.style.display = show ? 'block' : 'none';
+};
 
 const applyHudMode = () => {
   document.body.classList.toggle('hud-arcade', isArcade());
   if (scoreEl.style.display !== 'none') {
     highScoreEl.style.display = isArcade() ? 'flex' : 'none';
   }
+  if (isArcade()) highScoreValueEl.textContent = `${highScoreArcade} pts`;
 };
 let waveT = 0;
 let reliefActive = false;
@@ -342,6 +426,7 @@ const resetHudTrack = () => {
 let missLog = [];
 let missCount = 0;
 let missPoints = 0;
+let death100ToastActive = false;
 const logMiss = (pts, x, y, record = true) => {
   if (record) {
     missLog.unshift({ pts, x, y, t: 0 });
@@ -373,6 +458,10 @@ const registerDeath = () => {
   if (gameState.value === 'dying' || gameState.value === 'gameover') return;
   deathCount += 1;
   livesHalf = Math.max(0, livesHalf - 1);
+  if (isArcade() && deathCount >= 100) death100ToastActive = true;
+  if (isArcade() && deathCount === 100) {
+    playDied100Sequence();
+  }
 };
 
 const scoreDifficulty01 = () => clamp(score / 120, 0, 1);
@@ -552,6 +641,8 @@ const spawnBossExplosion = (scale = 1) => {
 };
 
 const resetGameVars = () => {
+  const keepDeathCount = isArcade() ? deathCount : 0;
+  const keepDeathToast = isArcade() ? death100ToastActive : false;
   npcs.length = 0;
   reds.length = 0;
   blues.length = 0;
@@ -635,7 +726,8 @@ const resetGameVars = () => {
   bossBonusAwarded = false;
   bossDifficulty = 0;
   bossDifficultyActive = false;
-  deathCount = 0;
+  deathCount = keepDeathCount;
+  death100ToastActive = keepDeathToast;
   enemiesKilled = 0;
   livesHalf = MAX_LIVES_HALF;
   finishExit = false;
@@ -686,6 +778,17 @@ const beginStartScreen = () => {
   } catch {
     // ignore
   }
+  arcadeMusic.pending = false;
+  arcadeMusic.delay = 0;
+  arcadeMusic.fade = 0;
+  arcadeMusic.fading = false;
+  try {
+    arcadeMusic.audio.pause();
+    arcadeMusic.audio.currentTime = 0;
+    arcadeMusic.audio.volume = arcadeMusic.baseVol;
+  } catch {
+    // ignore
+  }
   dialogueMusic.pending = false;
   dialogueMusic.delay = 0;
   dialogueMusic.fade = 0;
@@ -732,7 +835,7 @@ const beginStartScreen = () => {
   bossBonusAwarded = false;
   bossDifficulty = 0;
   bossDifficultyActive = false;
-  deathCount = 0;
+  if (!isArcade()) deathCount = 0;
   enemiesKilled = 0;
   livesHalf = MAX_LIVES_HALF;
   bossOutro.active = false;
@@ -775,6 +878,7 @@ const beginStartScreen = () => {
   startMenuLineBurst.puffs.length = 0;
   startMenuNpcShatter.active = false;
   startMenuNpcShatter.pieces.length = 0;
+  death100ToastActive = false;
   gameOverNoSeq.active = false;
   gameOverNoSeq.phase = 'cut';
   gameOverNoSeq.t = 0;
@@ -841,6 +945,10 @@ const startGameOverFinal = () => {
   try {
     levelMusic.audio.pause();
     levelMusic.audio.currentTime = 0;
+  } catch {}
+  try {
+    arcadeMusic.audio.pause();
+    arcadeMusic.audio.currentTime = 0;
   } catch {}
   try {
     dialogueMusic.audio.pause();
@@ -1228,15 +1336,38 @@ const respawnAtCheckpoint = () => {
 const startStartTransition = (scrollOnly = false) => {
   startScrollOnly = scrollOnly;
   if (!scrollOnly) {
-    levelMusic.pending = true;
-    levelMusic.delay = 1.5;
-    levelMusic.fade = 0;
-    levelMusic.fading = false;
-    try {
-      levelMusic.audio.currentTime = 0;
-      levelMusic.audio.volume = levelMusic.baseVol;
-    } catch {
-      // ignore
+    if (isArcade()) {
+      levelMusic.pending = false;
+      levelMusic.delay = 0;
+      levelMusic.fade = 0;
+      levelMusic.fading = false;
+      try { levelMusic.audio.pause(); } catch {}
+      arcadeMusic.pending = true;
+      arcadeMusic.delay = 1.5;
+      arcadeMusic.fade = 0;
+      arcadeMusic.fading = false;
+      try {
+        arcadeMusic.audio.currentTime = 0;
+        arcadeMusic.audio.volume = arcadeMusic.baseVol;
+      } catch {
+        // ignore
+      }
+    } else {
+      arcadeMusic.pending = false;
+      arcadeMusic.delay = 0;
+      arcadeMusic.fade = 0;
+      arcadeMusic.fading = false;
+      try { arcadeMusic.audio.pause(); } catch {}
+      levelMusic.pending = true;
+      levelMusic.delay = 1.5;
+      levelMusic.fade = 0;
+      levelMusic.fading = false;
+      try {
+        levelMusic.audio.currentTime = 0;
+        levelMusic.audio.volume = levelMusic.baseVol;
+      } catch {
+        // ignore
+      }
     }
   }
   if (scrollOnly) {
@@ -1826,6 +1957,21 @@ addEventListener('keydown', (e) => {
     }
     return;
   }
+  if (e.key === 'c' || e.key === 'C') {
+    if (isArcade() && (gameState.value === 'playing' || gameState.value === 'cutscene')) {
+      highScoreArcade = 0;
+      highScoreValueEl.textContent = `${highScoreArcade} pts`;
+      try { localStorage.setItem('gobblerHighScoreArcade', String(highScoreArcade)); } catch {}
+      return;
+    }
+  }
+  if (e.key === 't' || e.key === 'T') {
+    if (isArcade() && (gameState.value === 'playing' || gameState.value === 'cutscene')) {
+      deathCount = 100;
+      playDied100Sequence();
+      return;
+    }
+  }
   if (e.key === 'r' || e.key === 'R') {
     if (isArcade()) return;
     resetGameVars(); beginStartScreen(); return;
@@ -2102,6 +2248,27 @@ const tick = (now) => {
     if (levelMusic.fade <= 0) {
       levelMusic.fading = false;
       try { levelMusic.audio.pause(); } catch {}
+    }
+  }
+  if (arcadeMusic.pending) {
+    arcadeMusic.delay = Math.max(0, arcadeMusic.delay - dt);
+    if (arcadeMusic.delay <= 0) {
+      arcadeMusic.pending = false;
+      try {
+        arcadeMusic.audio.volume = arcadeMusic.baseVol;
+        arcadeMusic.audio.play();
+      } catch {
+        // ignore autoplay restrictions
+      }
+    }
+  }
+  if (arcadeMusic.fading) {
+    arcadeMusic.fade = Math.max(0, arcadeMusic.fade - dt);
+    const t = (arcadeMusic.fadeDur > 0) ? (arcadeMusic.fade / arcadeMusic.fadeDur) : 0;
+    arcadeMusic.audio.volume = arcadeMusic.baseVol * t;
+    if (arcadeMusic.fade <= 0) {
+      arcadeMusic.fading = false;
+      try { arcadeMusic.audio.pause(); } catch {}
     }
   }
 
@@ -2736,6 +2903,7 @@ const draw = () => {
   if (shakeAmp > 0) ctx.restore();
 
   drawUI(ctx, w, h, renderState, uiRenderDeps);
+  setRickRollVisible(isArcade() && death100ToastActive && deathCount >= 100);
 
   if (splashFadeOverlay.active) {
     const a = 1 - splashFadeOverlay.t;
@@ -3018,6 +3186,9 @@ const drawPauseDebugKeys = (ctx, w, h) => {
     lines.push('R: reset to start');
     lines.push('K: game over (test)');
     lines.push('ENTER: warp near finish');
+  } else {
+    lines.push('C: reset high score');
+    lines.push('T: test 100 deaths');
   }
   lines.push('SPACE: tap / flap');
   const lineH = 16;
@@ -3388,6 +3559,8 @@ const renderState = {
   get showHealthBar() { return showHealthBar; },
   get cinematicUiHidden() { return cinematicUiHidden; },
   get checkpointToastT() { return checkpointToastT; },
+  get death100ToastActive() { return death100ToastActive; },
+  get deathCount() { return deathCount; },
   get dialogueIndex() { return dialogueIndex; },
   get dialogueScriptLength() { return dialogueScript.length; },
 };
