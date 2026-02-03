@@ -120,13 +120,15 @@ const renderPlayerSprite = (pctx, size, r, palette, open01, wingFrame) => {
   pctx.fill();
 
   // Eye (single), clamped above the mouth at small sizes
-  pctx.fillStyle = eye;
-  const eyeR = r * 0.10;
-  const mouthTop = mouthY - gap * 0.5 - barH;
-  const eyeY = Math.min(-r * 0.20, mouthTop - eyeR * 1.2);
-  pctx.beginPath();
-  pctx.arc(r * 0.42, eyeY, eyeR, 0, Math.PI * 2);
-  pctx.fill();
+  if (eye) {
+    pctx.fillStyle = eye;
+    const eyeR = r * 0.10;
+    const mouthTop = mouthY - gap * 0.5 - barH;
+    const eyeY = Math.min(-r * 0.20, mouthTop - eyeR * 1.2);
+    pctx.beginPath();
+    pctx.arc(r * 0.42, eyeY, eyeR, 0, Math.PI * 2);
+    pctx.fill();
+  }
 
   // Idle line (closed mouth seam)
   if (o < 0.08) {

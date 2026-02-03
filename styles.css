@@ -2,7 +2,7 @@ html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden}
 canvas{display:block;width:100vw;height:100vh}
 .score{
   position:fixed;top:12px;right:12px;color:#f2d36a;
-  font:700 16px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font:800 22px/1.1 "Baloo 2","SF Pro Rounded","Arial Rounded MT Bold","Avenir Next Rounded","Nunito","Quicksand",system-ui,sans-serif;
   user-select:none;opacity:.9;display:none;
   align-items:center;gap:8px;
   text-shadow:
@@ -29,7 +29,7 @@ canvas{display:block;width:100vw;height:100vh}
 }
 .highscore{
   position:fixed;top:12px;right:12px;color:#f2d36a;
-  font:700 16px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font:800 22px/1.1 "Baloo 2","SF Pro Rounded","Arial Rounded MT Bold","Avenir Next Rounded","Nunito","Quicksand",system-ui,sans-serif;
   user-select:none;opacity:.9;display:none;
   align-items:center;gap:6px;
   text-shadow:

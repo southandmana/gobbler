@@ -1,11 +1,11 @@
 import { drawPlayer2 } from './player.js';
 
 export const NPC_PALETTE = {
-  body: '#4fcfd8',
-  bodyAccent: '#49c4cd',
+  body: '#8bff4a',
+  bodyAccent: '#7bea39',
   lips: '#ff8f92',
-  eye: '#3f2b00',
-  outline: '#46c3cb',
+  eye: null,
+  outline: '#6fdb2f',
 };
 
 const resolveFacing = (dirRad) => {
