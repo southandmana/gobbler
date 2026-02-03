@@ -259,7 +259,61 @@ export const drawGround = (ctx, groundY, width, height, scrollX) => {
   // no horizon line
 };
 
-export const drawBackdrop = (ctx, width, height, groundY, scrollX, menuScrollX, gameStateValue, bossBlackBackdrop, stars, cache = null) => {
+const DEFAULT_STORY_BG_GRADE = {
+  blur: 0,
+  saturate: 1,
+  contrast: 1,
+  brightness: 1,
+  hazeTop: 'rgba(255, 255, 255, 0)',
+  hazeBottom: 'rgba(255, 255, 255, 0)',
+};
+
+const drawStoryBackdrop = (ctx, width, groundY, image, grade = DEFAULT_STORY_BG_GRADE) => {
+  const imgW = image?.naturalWidth || image?.width || 0;
+  const imgH = image?.naturalHeight || image?.height || 0;
+  if (!imgW || !imgH) return false;
+
+  const targetH = Math.max(1, groundY);
+  const scale = Math.max(width / imgW, targetH / imgH);
+  const drawW = imgW * scale;
+  const drawH = imgH * scale;
+  const x = (width - drawW) * 0.5;
+  const y = groundY - drawH;
+  const blur = Math.max(0, grade.blur || 0);
+  const filter = `blur(${blur}px) saturate(${grade.saturate}) contrast(${grade.contrast}) brightness(${grade.brightness})`;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, width, groundY);
+  ctx.clip();
+  ctx.filter = filter;
+  ctx.drawImage(image, x, y, drawW, drawH);
+  ctx.filter = 'none';
+
+  const haze = ctx.createLinearGradient(0, 0, 0, groundY);
+  haze.addColorStop(0, grade.hazeTop);
+  haze.addColorStop(1, grade.hazeBottom);
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, 0, width, groundY);
+  ctx.restore();
+  return true;
+};
+
+export const drawBackdrop = (
+  ctx,
+  width,
+  height,
+  groundY,
+  scrollX,
+  menuScrollX,
+  gameStateValue,
+  bossBlackBackdrop,
+  stars,
+  cache = null,
+  storyBgImage = null,
+  storyBgReady = false,
+  useStoryBg = false,
+) => {
   const useBlackBackdrop = bossBlackBackdrop || gameStateValue === 'stageclear' || gameStateValue === 'gameoverFinal';
   const bgScrollX = (gameStateValue === 'start' || gameStateValue === 'startTransition')
     ? menuScrollX
@@ -269,15 +323,20 @@ export const drawBackdrop = (ctx, width, height, groundY, scrollX, menuScrollX, 
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, width, height);
   } else {
-    if (cache) {
-      ensureSkyCache(cache, width, height);
-      ctx.drawImage(cache.sky.canvas, 0, 0);
-      drawStarsCached(ctx, cache, 0.05, bgScrollX, groundY, width, stars);
-    } else {
-      drawSky(ctx, width, height);
-      drawStars(ctx, stars, 0.05, bgScrollX, groundY, width);
+    const didDrawStory = useStoryBg && storyBgReady && storyBgImage
+      ? drawStoryBackdrop(ctx, width, groundY, storyBgImage)
+      : false;
+    if (!didDrawStory) {
+      if (cache) {
+        ensureSkyCache(cache, width, height);
+        ctx.drawImage(cache.sky.canvas, 0, 0);
+        drawStarsCached(ctx, cache, 0.05, bgScrollX, groundY, width, stars);
+      } else {
+        drawSky(ctx, width, height);
+        drawStars(ctx, stars, 0.05, bgScrollX, groundY, width);
+      }
+      drawHills(ctx, width, groundY, bgScrollX);
     }
-    drawHills(ctx, width, groundY, bgScrollX);
   }
 
   return bgScrollX;

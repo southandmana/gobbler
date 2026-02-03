@@ -294,6 +294,11 @@ let loadingImageReady = false;
 loadingImage.onload = () => { loadingImageReady = true; };
 loadingImage.src = 'assets/loading_screen.png';
 
+const storyBgImage = new Image();
+let storyBgReady = false;
+storyBgImage.onload = () => { storyBgReady = true; };
+storyBgImage.src = 'assets/level1_bg.png';
+
 const levelMusic = (() => {
   const audio = new Audio('assets/sfx/level1_part1_music.mp3');
   audio.preload = 'auto';
@@ -2899,7 +2904,21 @@ const draw = () => {
 
   const startOffset = getStartViewOffset();
   const renderGroundY = groundY() + startOffset;
-  const bgScrollX = drawBackdrop(ctx, w, h, renderGroundY, scrollX, menuScrollX, gameState.value, bossOutro.blackBackdrop, starsFar, bgCache);
+  const bgScrollX = drawBackdrop(
+    ctx,
+    w,
+    h,
+    renderGroundY,
+    scrollX,
+    menuScrollX,
+    gameState.value,
+    bossOutro.blackBackdrop,
+    starsFar,
+    bgCache,
+    storyBgImage,
+    storyBgReady,
+    !isArcade(),
+  );
 
   const bossShake = (bossOutro.active && (bossOutro.phase === 'boom' || bossOutro.phase === 'explode')) ? 6 : 0;
   const menuShake = (startMenuBoom > 0) ? (START_MENU_SHAKE_AMP * (startMenuBoom / START_MENU_SHAKE_DUR)) : 0;
