@@ -1,5 +1,86 @@
 import { clamp } from '../utils/math.js';
 
+const roundRectPath = (c, x, y, w, h, r) => {
+  const rr = Math.max(0, Math.min(r, w * 0.5, h * 0.5));
+  c.beginPath();
+  c.moveTo(x + rr, y);
+  c.lineTo(x + w - rr, y);
+  c.arcTo(x + w, y, x + w, y + rr, rr);
+  c.lineTo(x + w, y + h - rr);
+  c.arcTo(x + w, y + h, x + w - rr, y + h, rr);
+  c.lineTo(x + rr, y + h);
+  c.arcTo(x, y + h, x, y + h - rr, rr);
+  c.lineTo(x, y + rr);
+  c.arcTo(x, y, x + rr, y, rr);
+  c.closePath();
+};
+
+const groundTileCache = {
+  canvas: document.createElement('canvas'),
+  w: 0,
+  h: 0,
+  dpr: 1,
+  pattern: null,
+};
+
+const drawGroundPlateTile = (c, tileW, tileH) => {
+  const pad = Math.max(1, tileH * 0.12);
+  const plateW = tileW - pad * 2;
+  const plateH = tileH - pad * 2;
+  const x = pad;
+  const y = pad;
+  const r = plateH * 0.22;
+
+  c.save();
+  c.clearRect(0, 0, tileW, tileH);
+
+  c.fillStyle = '#45b66c';
+  roundRectPath(c, x, y, plateW, plateH, r);
+  c.fill();
+
+  c.save();
+  roundRectPath(c, x, y, plateW, plateH, r);
+  c.clip();
+
+  const topH = plateH * 0.22;
+  c.fillStyle = 'rgba(255,255,255,0.3)';
+  c.fillRect(x, y, plateW, topH);
+
+  const bottomH = plateH * 0.2;
+  c.fillStyle = 'rgba(0, 0, 0, 0.2)';
+  c.beginPath();
+  c.moveTo(x + plateW * 0.1, y + plateH - bottomH);
+  c.lineTo(x + plateW * 0.9, y + plateH - bottomH);
+  c.lineTo(x + plateW, y + plateH);
+  c.lineTo(x, y + plateH);
+  c.closePath();
+  c.fill();
+
+  c.restore();
+  c.restore();
+};
+
+const ensureGroundTilePattern = (ctx, tileW, tileH) => {
+  const dpr = Math.max(1, ctx.getTransform().a || 1);
+  if (groundTileCache.w === tileW && groundTileCache.h === tileH && groundTileCache.dpr === dpr && groundTileCache.pattern) return;
+  groundTileCache.w = tileW;
+  groundTileCache.h = tileH;
+  groundTileCache.dpr = dpr;
+  const c = groundTileCache.canvas;
+  c.width = Math.max(1, Math.ceil(tileW * dpr));
+  c.height = Math.max(1, Math.ceil(tileH * dpr));
+  const cctx = c.getContext('2d');
+  cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawGroundPlateTile(cctx, tileW, tileH);
+  groundTileCache.pattern = ctx.createPattern(c, 'repeat');
+  if (groundTileCache.pattern && typeof groundTileCache.pattern.setTransform === 'function') {
+    const m = new DOMMatrix();
+    m.a = 1 / dpr;
+    m.d = 1 / dpr;
+    groundTileCache.pattern.setTransform(m);
+  }
+};
+
 export const makeStars = (n, rand) => {
   const s = [];
   for (let i = 0; i < n; i++) s.push({ x: Math.random(), y: Math.random(), r: rand(0.7, 1.8) });
@@ -126,29 +207,54 @@ export const drawHills = (ctx, width, groundY, scrollX) => {
 
 export const drawGround = (ctx, groundY, width, height, scrollX) => {
   const groundH = Math.max(20, height - groundY);
-  const colors = ['#e59a91', '#e8b37d', '#ead98a', '#b9d6a2', '#9fd3cc', '#9fb9e6', '#b59ddf'];
-  const rows = colors.length;
-  const rowH = groundH / rows;
-  const brickW = Math.max(72, Math.min(140, width * 0.16));
-  const hash2 = (x, y) => {
-    const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-    return v - Math.floor(v);
-  };
+  ctx.fillStyle = '#473d55';
+  ctx.fillRect(0, groundY, width, groundH);
 
-  for (let i = 0; i < rows; i++) {
-    const y = groundY + i * rowH;
-    const rowBottom = (i === rows - 1) ? (groundY + groundH) : (groundY + (i + 1) * rowH);
-    const brickH = Math.max(4, rowBottom - y);
-    const rowOffset = (i % 2) * brickW * 0.5;
-    const colStart = Math.floor((scrollX - rowOffset - brickW) / brickW);
-    const colEnd = Math.floor((scrollX - rowOffset + width + brickW) / brickW);
-    for (let col = colStart; col <= colEnd; col += 1) {
-      const x = col * brickW + rowOffset - scrollX;
-      const colorIndex = Math.floor(hash2(col, i) * colors.length);
-      ctx.fillStyle = colors[colorIndex];
-      ctx.fillRect(x, y, brickW, brickH);
+  const tileH = Math.max(14, Math.min(26, groundH * 0.32));
+  const tileW = Math.max(52, Math.round(tileH * 3.2));
+  ensureGroundTilePattern(ctx, tileW, tileH);
+  if (groundTileCache.canvas) {
+    const off = ((scrollX % tileW) + tileW) % tileW;
+    const overlayY = groundY;
+    ctx.save();
+    for (let x = -off - tileW; x <= width + tileW; x += tileW) {
+      ctx.drawImage(groundTileCache.canvas, x, overlayY, tileW, tileH);
+    }
+    ctx.restore();
+  }
+
+  const fillTileH = Math.max(20, Math.min(34, tileH * 1.35));
+  const fillTileW = Math.max(72, Math.round(fillTileH * 3.6));
+  const fillGapY = Math.max(2, Math.round(fillTileH * 0.12));
+  const fillGapX = Math.max(3, Math.round(fillTileH * 0.18));
+  const fillR = fillTileH * 0.22;
+  const fillTop = groundY + tileH + fillGapY;
+  const fillBottom = groundY + groundH - 1;
+  const fillOff = ((scrollX % (fillTileW + fillGapX)) + (fillTileW + fillGapX)) % (fillTileW + fillGapX);
+
+  ctx.save();
+  ctx.fillStyle = '#574c6a';
+  let rowIndex = 0;
+  let lastRowY = null;
+  for (let y = fillTop; y + fillTileH <= fillBottom; y += fillTileH + fillGapY) {
+    const rowOffset = (rowIndex % 2) ? ((fillTileW + fillGapX) * 0.5) : 0;
+    for (let x = -fillOff - (fillTileW + fillGapX); x <= width + fillTileW + fillGapX; x += fillTileW + fillGapX) {
+      roundRectPath(ctx, x + rowOffset, y, fillTileW, fillTileH, fillR);
+      ctx.fill();
+    }
+    lastRowY = y;
+    rowIndex += 1;
+  }
+  if (lastRowY !== null && lastRowY + fillTileH < fillBottom - 1) {
+    const bottomRowOffset = Math.round(fillTileH * 0.7);
+    const y = fillBottom - fillTileH + bottomRowOffset;
+    const rowOffset = (rowIndex % 2) ? ((fillTileW + fillGapX) * 0.5) : 0;
+    for (let x = -fillOff - (fillTileW + fillGapX); x <= width + fillTileW + fillGapX; x += fillTileW + fillGapX) {
+      roundRectPath(ctx, x + rowOffset, y, fillTileW, fillTileH, fillR);
+      ctx.fill();
     }
   }
+  ctx.restore();
 
   // no horizon line
 };

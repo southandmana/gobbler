@@ -279,6 +279,10 @@ const titleImage = new Image();
 let titleImageReady = false;
 titleImage.onload = () => { titleImageReady = true; };
 titleImage.src = 'assets/game_title_1.png';
+const continueImage = new Image();
+let continueImageReady = false;
+continueImage.onload = () => { continueImageReady = true; };
+continueImage.src = 'assets/contine.png';
 
 const companyImage = new Image();
 let companyImageReady = false;
@@ -338,6 +342,15 @@ const isProbablyMobile = () => {
 };
 
 const quality = { dprCap: 2 };
+let currentDpr = 1;
+const START_MENU_BUTTON_SHADING = 'solid'; // 'solid' | 'hard' | 'smooth'
+const startMenuButtonCache = new Map();
+const startMenuTextCache = new Map();
+const startMenuTextMeasureCtx = document.createElement('canvas').getContext('2d') || ctx;
+const clearStartMenuCaches = () => {
+  startMenuButtonCache.clear();
+  startMenuTextCache.clear();
+};
 const updateQuality = () => {
   quality.dprCap = isProbablyMobile() ? 1.5 : 2;
 };
@@ -345,11 +358,13 @@ const updateQuality = () => {
 const resize = () => {
   updateQuality();
   const dpr = Math.max(1, Math.min(quality.dprCap, window.devicePixelRatio || 1));
+  currentDpr = dpr;
   canvas.width = Math.floor(innerWidth * dpr);
   canvas.height = Math.floor(innerHeight * dpr);
   canvas.style.width = innerWidth + 'px';
   canvas.style.height = innerHeight + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  clearStartMenuCaches();
 };
 addEventListener('resize', resize);
 resize();
@@ -3340,7 +3355,7 @@ const drawHealthBar = (ctx) => {
 
 const getGameOverButtons = (w, h) => {
   const btnW = Math.min(240, w * 0.36);
-  const btnH = 44;
+  const btnH = 32;
   const gap = Math.min(30, w * 0.06);
   const totalW = btnW * 2 + gap;
   const x0 = (w - totalW) * 0.5;
@@ -3356,31 +3371,33 @@ const drawGameOverChoice = (ctx, w, h) => {
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#f2f4f7';
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-  ctx.lineWidth = 6;
-  ctx.font = '800 52px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-  ctx.strokeText('CONTINUE?', cx, h * 0.4);
-  ctx.fillText('CONTINUE?', cx, h * 0.4);
+  const titleY = h * 0.4;
+  if (continueImageReady) {
+    const imgW = continueImage.naturalWidth || 0;
+    const imgH = continueImage.naturalHeight || 0;
+    if (imgW > 0 && imgH > 0) {
+      const maxW = Math.min(w * 0.8, 520);
+      const maxH = Math.min(h * 0.18, 120);
+      const scale = Math.min(maxW / imgW, maxH / imgH);
+      const drawW = imgW * scale;
+      const drawH = imgH * scale;
+      ctx.drawImage(continueImage, cx - drawW * 0.5, titleY - drawH * 0.5, drawW, drawH);
+    }
+  } else {
+    ctx.fillStyle = '#f2f4f7';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.lineWidth = 6;
+    ctx.font = '800 52px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.strokeText('CONTINUE?', cx, titleY);
+    ctx.fillText('CONTINUE?', cx, titleY);
+  }
 
   ctx.lineWidth = 3;
   const buttons = getGameOverButtons(w, h);
   const yesLabel = insertMode ? `INSERT COINS (${COINS_MAX})` : 'DUCK YEAH!';
   for (const b of buttons) {
-    const isInsert = (b.id === 'yes' && insertMode);
-    ctx.fillStyle = isInsert ? '#f2d36a' : '#000';
-    ctx.strokeStyle = 'rgba(242, 244, 247, 0.9)';
-    ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
-    ctx.fillStyle = isInsert ? '#2f3c14' : '#f2f4f7';
     const label = (b.id === 'yes') ? yesLabel : b.label;
-    let fontSize = 16;
-    ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    while (ctx.measureText(label).width > b.w - 16 && fontSize > 11) {
-      fontSize -= 1;
-      ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    }
-    ctx.fillText(label, b.x + b.w * 0.5, b.y + b.h * 0.56);
+    drawStartMenuNeonButton(ctx, b, label, false);
   }
 
   let coinsAlpha = 1;
@@ -3598,10 +3615,226 @@ const uiRenderDeps = {
   easeInOut,
 };
 
+const roundRectPath = (c, x, y, w, h, r) => {
+  const rr = Math.max(0, Math.min(r, w * 0.5, h * 0.5));
+  c.beginPath();
+  c.moveTo(x + rr, y);
+  c.lineTo(x + w - rr, y);
+  c.arcTo(x + w, y, x + w, y + rr, rr);
+  c.lineTo(x + w, y + h - rr);
+  c.arcTo(x + w, y + h, x + w - rr, y + h, rr);
+  c.lineTo(x + rr, y + h);
+  c.arcTo(x, y + h, x, y + h - rr, rr);
+  c.lineTo(x, y + rr);
+  c.arcTo(x, y, x + rr, y, rr);
+  c.closePath();
+};
+
+const drawStartMenuButtonSheen = (c, x, y, w, h, r, innerInset) => {
+  const clipX = x + innerInset;
+  const clipY = y + innerInset;
+  const clipW = w - innerInset * 2;
+  const clipH = h - innerInset * 2;
+  const clipR = r - innerInset;
+  const topBandH = h * 0.12;
+  const bottomBandH = h * 0.1;
+  const topBandY = y + innerInset * 1.1;
+  const bottomBandY = y + h - innerInset * 1.1 - bottomBandH;
+  c.save();
+  roundRectPath(c, clipX, clipY, clipW, clipH, clipR);
+  c.clip();
+
+  if (START_MENU_BUTTON_SHADING === 'solid') {
+    c.fillStyle = 'rgba(255,255,255,0.45)';
+    roundRectPath(
+      c,
+      x + innerInset * 1.4,
+      topBandY,
+      w - innerInset * 2.8,
+      topBandH,
+      r - innerInset * 1.1
+    );
+    c.fill();
+
+    c.fillStyle = 'rgba(0,0,0,0.22)';
+    roundRectPath(
+      c,
+      x + innerInset * 1.2,
+      bottomBandY,
+      w - innerInset * 2.4,
+      bottomBandH,
+      r - innerInset * 1.2
+    );
+    c.fill();
+    c.restore();
+    return;
+  }
+
+  const highlightGrad = c.createLinearGradient(0, y, 0, y + h);
+  const topStop = Math.max(0.15, Math.min(0.45, (topBandY - y + topBandH) / h));
+  const bottomStop = Math.max(0.55, Math.min(0.9, (bottomBandY - y) / h));
+  if (START_MENU_BUTTON_SHADING === 'hard') {
+    highlightGrad.addColorStop(0, 'rgba(255,255,255,0.55)');
+    highlightGrad.addColorStop(topStop, 'rgba(255,255,255,0.55)');
+    highlightGrad.addColorStop(Math.min(0.999, topStop + 0.001), 'rgba(255,255,255,0)');
+    highlightGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  } else {
+    highlightGrad.addColorStop(0, 'rgba(255,255,255,0.6)');
+    highlightGrad.addColorStop(Math.min(0.9, topStop + 0.35), 'rgba(255,255,255,0)');
+  }
+  c.save();
+  c.fillStyle = highlightGrad;
+  roundRectPath(
+    c,
+    x + innerInset * 1.4,
+    y + innerInset * 1.1,
+    w - innerInset * 2.8,
+    h - innerInset * 2.2,
+    r - innerInset * 1.1
+  );
+  c.fill();
+  c.restore();
+
+  const shadeGrad = c.createLinearGradient(0, y, 0, y + h);
+  if (START_MENU_BUTTON_SHADING === 'hard') {
+    shadeGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    shadeGrad.addColorStop(bottomStop, 'rgba(0,0,0,0)');
+    shadeGrad.addColorStop(Math.min(0.999, bottomStop + 0.001), 'rgba(0,0,0,0.25)');
+    shadeGrad.addColorStop(1, 'rgba(0,0,0,0.25)');
+  } else {
+    shadeGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    shadeGrad.addColorStop(1, 'rgba(0,0,0,0.25)');
+  }
+  c.save();
+  c.fillStyle = shadeGrad;
+  roundRectPath(
+    c,
+    x + innerInset * 1.2,
+    y + innerInset * 1.2,
+    w - innerInset * 2.4,
+    h - innerInset * 2.4,
+    r - innerInset * 1.2
+  );
+  c.fill();
+  c.restore();
+  c.restore();
+};
+
+const buildStartMenuButtonTexture = (w, h) => {
+  const glowPad = Math.ceil(Math.max(10, h * 0.32));
+  const texW = w + glowPad * 2;
+  const texH = h + glowPad * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(texW * currentDpr);
+  canvas.height = Math.ceil(texH * currentDpr);
+  const c = canvas.getContext('2d');
+  c.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
+  c.clearRect(0, 0, texW, texH);
+
+  const x = glowPad;
+  const y = glowPad;
+  const r = h * 0.5;
+  const outerLine = Math.max(3, h * 0.12);
+  const innerInset = Math.max(2, h * 0.08);
+  const glowBlur = h * 0.3;
+
+  c.save();
+  c.shadowColor = 'rgba(63, 215, 255, 0.85)';
+  c.shadowBlur = glowBlur;
+  c.lineWidth = outerLine;
+  c.strokeStyle = '#44dbff';
+  roundRectPath(c, x, y, w, h, r);
+  c.stroke();
+  c.restore();
+
+  c.save();
+  c.lineWidth = Math.max(2, h * 0.08);
+  c.strokeStyle = '#6fe9ff';
+  roundRectPath(c, x, y, w, h, r);
+  c.stroke();
+  c.restore();
+
+  const fillGrad = c.createLinearGradient(0, y, 0, y + h);
+  fillGrad.addColorStop(0, '#ffc95a');
+  fillGrad.addColorStop(0.52, '#ff9f1f');
+  fillGrad.addColorStop(1, '#f57f00');
+  c.fillStyle = fillGrad;
+  roundRectPath(c, x + innerInset, y + innerInset, w - innerInset * 2, h - innerInset * 2, r - innerInset);
+  c.fill();
+
+  drawStartMenuButtonSheen(c, x, y, w, h, r, innerInset);
+
+  return { canvas, pad: glowPad };
+};
+
+const getStartMenuButtonTexture = (w, h) => {
+  const key = `${w}|${h}|${currentDpr}`;
+  const cached = startMenuButtonCache.get(key);
+  if (cached) return cached;
+  const texture = buildStartMenuButtonTexture(w, h);
+  startMenuButtonCache.set(key, texture);
+  return texture;
+};
+
+const getStartMenuTextStyle = (label, maxTextW, height) => {
+  const key = `${label}|${Math.round(maxTextW)}|${Math.round(height)}`;
+  const cached = startMenuTextCache.get(key);
+  if (cached) return cached;
+  const fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  const minFontSize = Math.max(12, Math.round(height * 0.3));
+  let fontSize = Math.round(height * 0.52);
+  let font = `800 ${fontSize}px ${fontFamily}`;
+  startMenuTextMeasureCtx.font = font;
+  while (startMenuTextMeasureCtx.measureText(label).width > maxTextW && fontSize > minFontSize) {
+    fontSize -= 1;
+    font = `800 ${fontSize}px ${fontFamily}`;
+    startMenuTextMeasureCtx.font = font;
+  }
+  const style = {
+    font,
+    strokeWidth: Math.max(2, Math.round(fontSize * 0.14)),
+  };
+  startMenuTextCache.set(key, style);
+  return style;
+};
+
+const drawStartMenuNeonButton = (ctx, button, label, pressed) => {
+  const { canvas, pad } = getStartMenuButtonTexture(button.w, button.h);
+  const pressOffset = pressed ? Math.max(1, Math.round(button.h * 0.06)) : 0;
+  ctx.drawImage(
+    canvas,
+    button.x - pad + pressOffset,
+    button.y - pad + pressOffset,
+    button.w + pad * 2,
+    button.h + pad * 2
+  );
+
+  const maxTextW = button.w - Math.max(24, button.h * 0.7);
+  const textStyle = getStartMenuTextStyle(label, maxTextW, button.h);
+  const textX = button.x + button.w * 0.5 + pressOffset;
+  const textY = button.y + button.h * 0.5 + pressOffset;
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = textStyle.font;
+  ctx.lineWidth = textStyle.strokeWidth;
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+  ctx.strokeStyle = '#d84a00';
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = Math.max(2, Math.round(button.h * 0.12));
+  ctx.shadowOffsetY = Math.max(1, Math.round(button.h * 0.05));
+  ctx.strokeText(label, textX, textY);
+  ctx.fillText(label, textX, textY);
+  ctx.restore();
+};
+
 const getStartMenuButtons = (w, h) => {
   const btnW = Math.min(520, w * 0.72);
   const btnH = 44;
-  const gapY = 14;
+  const gapY = 45;
   const totalH = btnH * 4 + gapY * 3;
   const x0 = (w - btnW) * 0.5;
   const y0 = (h - totalH) * 0.5;
@@ -3618,7 +3851,6 @@ const drawStartMenuChoice = (ctx, w, h, alpha = 1) => {
   ctx.globalAlpha = alpha;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.lineWidth = 3;
 
   const buttons = getStartMenuButtons(w, h);
   const hideAllButtons = startMenuHidden && !startMenuKeepId;
@@ -3665,23 +3897,7 @@ const drawStartMenuChoice = (ctx, w, h, alpha = 1) => {
         ctx.restore();
         continue;
       }
-      const cx = b.x + b.w * 0.5;
-      const cy = b.y + b.h * 0.5;
-      ctx.save();
-      ctx.fillStyle = '#000';
-      ctx.strokeStyle = 'rgba(242, 244, 247, 0.9)';
-      ctx.fillRect(b.x, b.y, b.w, b.h);
-      ctx.strokeRect(b.x, b.y, b.w, b.h);
-      ctx.fillStyle = '#f2f4f7';
-      let fontSize = 16;
-      ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-      const maxTextW = b.w - 16;
-      while (ctx.measureText(b.label).width > maxTextW && fontSize > 11) {
-        fontSize -= 1;
-        ctx.font = `700 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-      }
-      ctx.fillText(b.label, b.x + b.w * 0.5, b.y + b.h * 0.56);
-      ctx.restore();
+      drawStartMenuNeonButton(ctx, b, b.label, startMenuPressedId === b.id);
       ctx.restore();
     }
   }
