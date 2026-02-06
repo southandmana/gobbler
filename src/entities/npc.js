@@ -112,7 +112,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
       if (!player.alive || player._beingEaten) continue;
 
       const d = dist(player.x, player.y, n.x, n.y);
-      const prC = player.r * (0.5 * (1 + player.squashY));
+      const prC = player.r * (0.75 * (1 + player.squashY));
       const capture = prC + n.r + EAT.capturePad;
 
       const playerCanEat = canEat(player.r, n.r);
@@ -129,7 +129,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
       }
 
       if (d <= capture) {
-        if (n.x >= player.x - 10) {
+        if (n.x >= player.x - Math.min(20, player.r * 0.6)) {
           if (playerCanEat) {
             n.state = 'beingEaten';
             n.t = 0;
