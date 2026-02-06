@@ -1,7 +1,8 @@
 export const clamp = (v, a, b) => {
-  const safeV = Number.isFinite(v) ? v : 0;
-  let min = Number.isFinite(a) ? a : 0;
-  let max = Number.isFinite(b) ? b : 0;
+  const isNum = (x) => typeof x === 'number' && !Number.isNaN(x);
+  const safeV = isNum(v) ? v : 0;
+  let min = isNum(a) ? a : 0;
+  let max = isNum(b) ? b : 0;
   if (min > max) {
     const tmp = min;
     min = max;

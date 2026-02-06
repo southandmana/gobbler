@@ -41,6 +41,20 @@ const clampPlayerToBounds = (player, clamp, groundY) => {
   player.y = clampedY;
 };
 
+// Used after successful eats: keep the player on-screen horizontally and above ground,
+// but allow temporary top overflow so growth does not cause a visible snap-down.
+const clampPlayerAfterGrowth = (player, clamp, groundY) => {
+  if (!player) return;
+  const r = Math.max(0, player.r || 0);
+  const squashY = player.squashY ?? 1;
+  const ry = Math.max(0, r * squashY);
+  const minX = r;
+  const maxX = Math.max(minX, innerWidth - r);
+  const maxY = Math.max(ry, groundY() - ry);
+  player.x = clamp(player.x, minX, maxX);
+  if (player.y > maxY) player.y = maxY;
+};
+
 export const makeNPC = (x, y, r, pts, worth, MOUTH) => ({
   x,
   y,
@@ -112,7 +126,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
       if (!player.alive || player._beingEaten) continue;
 
       const d = dist(player.x, player.y, n.x, n.y);
-      const prC = player.r * (0.75 * (1 + player.squashY));
+      const prC = player.r * (0.5 * (1 + player.squashY));
       const capture = prC + n.r + EAT.capturePad;
 
       const playerCanEat = canEat(player.r, n.r);
@@ -129,7 +143,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
       }
 
       if (d <= capture) {
-        if (n.x >= player.x - Math.min(20, player.r * 0.6)) {
+        if (n.x >= player.x - 10) {
           if (playerCanEat) {
             n.state = 'beingEaten';
             n.t = 0;
@@ -180,7 +194,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
         addScore(n.pts, player.x, player.y - player.r - 10);
         const grow = GROW.baseStep + GROW.fromRadius(n.r0);
         player.r = clamp(player.r + grow, player.baseR, player.maxR);
-        clampPlayerToBounds(player, clamp, groundY);
+        clampPlayerAfterGrowth(player, clamp, groundY);
       }
     } else if (n.state === 'eatingPlayer') {
       n.x -= move;
