@@ -378,7 +378,21 @@ const updateQuality = () => {
   quality.dprCap = isProbablyMobile() ? 1.5 : 2;
 };
 
-const resize = () => {
+const listeners = {};
+const eventListenerController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+const eventListenerSignal = eventListenerController ? eventListenerController.signal : null;
+const keyListenerOptions = eventListenerSignal
+  ? { passive: false, signal: eventListenerSignal }
+  : { passive: false };
+const defaultListenerOptions = eventListenerSignal ? { signal: eventListenerSignal } : undefined;
+let didCleanupListeners = false;
+
+const addWindowListener = (type, listener, options) => {
+  if (didCleanupListeners) return;
+  window.addEventListener(type, listener, options);
+};
+
+listeners.resize = function resizeHandler() {
   updateQuality();
   const dpr = Math.max(1, Math.min(quality.dprCap, window.devicePixelRatio || 1));
   currentDpr = dpr;
@@ -389,8 +403,8 @@ const resize = () => {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   clearStartMenuCaches();
 };
-addEventListener('resize', resize);
-resize();
+addWindowListener('resize', listeners.resize, defaultListenerOptions);
+listeners.resize();
 
 const START_VIEW_OFFSET_RATIO = 1.0;
 const getStartViewOffset = () => {
@@ -1975,7 +1989,7 @@ const inputRelease = () => {
   }
 };
 
-addEventListener('keydown', (e) => {
+listeners.keydown = function keydownHandler(e) {
   if (e.key === 'h' || e.key === 'H') {
     debugHUD = !debugHUD;
   }
@@ -2030,21 +2044,21 @@ addEventListener('keydown', (e) => {
     if (isArcade()) return;
     if (gameState.value === 'playing') warpNearFinish();
   }
-}, { passive: false });
+};
 
-addEventListener('keyup', (e) => {
+listeners.keyup = function keyupHandler(e) {
   if (e.code === 'Space') {
     e.preventDefault();
     if (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) inputRelease();
   }
-}, { passive: false });
+};
 
 const toCanvasXY = (ev) => {
   const rect = canvas.getBoundingClientRect();
   return { x: (ev.clientX - rect.left), y: (ev.clientY - rect.top) };
 };
 
-addEventListener('pointerdown', (ev) => {
+listeners.pointerdown = function pointerdownHandler(ev) {
   const { x, y } = toCanvasXY(ev);
   if (gameState.value === 'splashCompany' || gameState.value === 'splashLoading') {
     if (gameState.value === 'splashCompany' && !splash.fading) advanceSplash();
@@ -2098,19 +2112,57 @@ addEventListener('pointerdown', (ev) => {
   if (isDialogueActive()) { advanceDialogue(); return; }
   if (gameState.value === 'startTransition' || gameState.value === 'restartTransition' || gameState.value === 'dying' || cutscenePending) return;
   inputPress();
-});
+};
 
-addEventListener('pointerup', (ev) => {
+listeners.pointerup = function pointerupHandler(ev) {
   if (gameState.value === 'start') {
     startMenuPressedId = null;
   }
   if (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) inputRelease();
-});
-addEventListener('pointercancel', () => {
+};
+
+listeners.pointercancel = function pointercancelHandler() {
   if (gameState.value === 'start') startMenuPressedId = null;
   if (gameState.value === 'playing' || (gameState.value === 'cutscene' && showHealthBar)) inputRelease();
-});
-addEventListener('blur', () => { inputRelease(); });
+};
+
+listeners.blur = function blurHandler() { inputRelease(); };
+
+addWindowListener('keydown', listeners.keydown, keyListenerOptions);
+addWindowListener('keyup', listeners.keyup, keyListenerOptions);
+addWindowListener('pointerdown', listeners.pointerdown, defaultListenerOptions);
+addWindowListener('pointerup', listeners.pointerup, defaultListenerOptions);
+addWindowListener('pointercancel', listeners.pointercancel, defaultListenerOptions);
+addWindowListener('blur', listeners.blur, defaultListenerOptions);
+const cleanupListeners = () => {
+  if (didCleanupListeners) return;
+  didCleanupListeners = true;
+  window.removeEventListener('resize', listeners.resize, defaultListenerOptions);
+  window.removeEventListener('keydown', listeners.keydown, keyListenerOptions);
+  window.removeEventListener('keyup', listeners.keyup, keyListenerOptions);
+  window.removeEventListener('pointerdown', listeners.pointerdown, defaultListenerOptions);
+  window.removeEventListener('pointerup', listeners.pointerup, defaultListenerOptions);
+  window.removeEventListener('pointercancel', listeners.pointercancel, defaultListenerOptions);
+  window.removeEventListener('blur', listeners.blur, defaultListenerOptions);
+  window.removeEventListener('pagehide', cleanupListeners);
+  window.removeEventListener('beforeunload', cleanupListeners);
+  if (eventListenerController) eventListenerController.abort();
+};
+
+export { cleanupListeners };
+
+const unloadListenerAddOptions = eventListenerSignal
+  ? { once: true, signal: eventListenerSignal }
+  : { once: true };
+
+addWindowListener('pagehide', cleanupListeners, unloadListenerAddOptions);
+addWindowListener('beforeunload', cleanupListeners, unloadListenerAddOptions);
+
+if (import.meta && import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    cleanupListeners();
+  });
+}
 
 let last = performance.now();
 beginSplashScreens();
