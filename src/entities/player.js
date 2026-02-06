@@ -1,11 +1,26 @@
 import { clamp, lerp } from '../utils/math.js';
 
 const player2Canvas = document.createElement('canvas');
-const player2Ctx = player2Canvas.getContext('2d');
+let player2Ctx = null;
+try {
+  player2Ctx = player2Canvas.getContext('2d');
+} catch (err) {
+  console.warn('[player] Failed to create player sprite context', err);
+}
 const spriteCache = new Map();
 const paletteIds = new WeakMap();
 let paletteIdSeq = 1;
 let cachedDpr = 1;
+
+const tryGetContext = (canvas) => {
+  if (!canvas) return null;
+  try {
+    return canvas.getContext('2d');
+  } catch (err) {
+    console.warn('[player] Failed to get canvas context', err);
+    return null;
+  }
+};
 
 export const clearPlayerSpriteCache = () => {
   spriteCache.clear();
@@ -177,8 +192,13 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
       cached = document.createElement('canvas');
       cached.width = size;
       cached.height = size;
-      renderPlayerSprite(cached.getContext('2d'), size, r, palette, 0, wingFrame);
-      spriteCache.set(key, cached);
+      const cachedCtx = tryGetContext(cached);
+      if (cachedCtx) {
+        renderPlayerSprite(cachedCtx, size, r, palette, 0, wingFrame);
+        spriteCache.set(key, cached);
+      } else {
+        cached = null;
+      }
     }
     sourceCanvas = cached;
   } else {
@@ -186,6 +206,8 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
       player2Canvas.width = size;
       player2Canvas.height = size;
     }
+    if (!player2Ctx) player2Ctx = tryGetContext(player2Canvas);
+    if (!player2Ctx) return;
     renderPlayerSprite(player2Ctx, size, r, palette, o, wingFrame);
   }
 
@@ -196,12 +218,19 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
       const regenerated = document.createElement('canvas');
       regenerated.width = size;
       regenerated.height = size;
-      renderPlayerSprite(regenerated.getContext('2d'), size, r, palette, 0, wingFrame);
-      spriteCache.set(key, regenerated);
-      sourceCanvas = regenerated;
+      const regeneratedCtx = tryGetContext(regenerated);
+      if (regeneratedCtx) {
+        renderPlayerSprite(regeneratedCtx, size, r, palette, 0, wingFrame);
+        spriteCache.set(key, regenerated);
+        sourceCanvas = regenerated;
+      } else {
+        return;
+      }
     } else {
       player2Canvas.width = size;
       player2Canvas.height = size;
+      if (!player2Ctx) player2Ctx = tryGetContext(player2Canvas);
+      if (!player2Ctx) return;
       renderPlayerSprite(player2Ctx, size, r, palette, o, wingFrame);
       sourceCanvas = player2Canvas;
     }

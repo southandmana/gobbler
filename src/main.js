@@ -10,8 +10,49 @@ import { makeNPC, updateNPCs, driftNPCs, drawCharacter, NPC_PALETTE } from './en
 import { makeRed, updateReds, driftReds, drawDynamiteBomb } from './entities/hazards.js';
 import { makeBlue, updateBlues, driftBlues, drawStar, drawStarSpecks } from './entities/powerups.js';
 
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+const canvasEl = document.getElementById('c');
+const canvas = canvasEl || document.createElement('canvas');
+let ctx = null;
+let canvasReady = false;
+let canvasErrorShown = false;
+const showCanvasError = (message, err) => {
+  if (canvasErrorShown) return;
+  canvasErrorShown = true;
+  console.error(message, err);
+  const notice = document.createElement('div');
+  notice.textContent = message;
+  notice.style.position = 'fixed';
+  notice.style.inset = '0';
+  notice.style.display = 'flex';
+  notice.style.alignItems = 'center';
+  notice.style.justifyContent = 'center';
+  notice.style.background = 'rgba(0, 0, 0, 0.85)';
+  notice.style.color = '#f2f4f7';
+  notice.style.font = '600 16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  notice.style.zIndex = '9999';
+  document.body.appendChild(notice);
+};
+if (!canvasEl) {
+  showCanvasError('Canvas element not found. Unable to start the game.');
+} else {
+  try {
+    ctx = canvas.getContext('2d');
+  } catch (err) {
+    showCanvasError('Canvas initialization failed. Please reload.', err);
+  }
+  if (!ctx) {
+    showCanvasError('Canvas initialization failed. Please reload.');
+  } else {
+    canvasReady = true;
+  }
+}
+if (!ctx) {
+  try {
+    ctx = document.createElement('canvas').getContext('2d');
+  } catch {
+    ctx = null;
+  }
+}
 const scoreEl = document.getElementById('score');
 const scoreValueEl = document.createElement('span');
 scoreValueEl.className = 'score-value';
@@ -36,6 +77,12 @@ document.body.appendChild(highScoreEl);
 const rickRollEl = document.createElement('img');
 rickRollEl.src = 'assets/rick_roll.gif';
 rickRollEl.alt = '';
+let rickRollReady = true;
+rickRollEl.onerror = (err) => {
+  rickRollReady = false;
+  console.warn('[image] Failed to load rick roll asset', err);
+  rickRollEl.style.display = 'none';
+};
 rickRollEl.setAttribute('aria-hidden', 'true');
 rickRollEl.style.position = 'fixed';
 rickRollEl.style.left = '0';
@@ -47,23 +94,42 @@ rickRollEl.style.pointerEvents = 'none';
 rickRollEl.style.zIndex = '5';
 document.body.appendChild(rickRollEl);
 
+let localStorageAvailable = false;
+const initLocalStorageAvailability = () => {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    const key = '__gobbler_ls_test__';
+    localStorage.setItem(key, '1');
+    localStorage.removeItem(key);
+    return true;
+  } catch (err) {
+    console.warn('[storage] localStorage unavailable', err);
+    return false;
+  }
+};
+localStorageAvailable = initLocalStorageAvailability();
+
 let highScoreStory = 0;
 let highScoreArcade = 0;
-try {
-  const storedArcade = Number.parseInt(localStorage.getItem('gobblerHighScoreArcade') || '0', 10);
-  const storedStory = Number.parseInt(localStorage.getItem('gobblerHighScoreStory') || '0', 10);
-  highScoreArcade = Number.isFinite(storedArcade) ? storedArcade : 0;
-  highScoreStory = Number.isFinite(storedStory) ? storedStory : 0;
-  if (!localStorage.getItem('gobblerHighScoreArcade')) {
-    const legacy = Number.parseInt(localStorage.getItem('gobblerHighScore') || '0', 10);
-    if (Number.isFinite(legacy) && legacy > 0) {
-      highScoreArcade = legacy;
-      localStorage.setItem('gobblerHighScoreArcade', String(legacy));
+if (localStorageAvailable) {
+  try {
+    const storedArcade = Number.parseInt(localStorage.getItem('gobblerHighScoreArcade') || '0', 10);
+    const storedStory = Number.parseInt(localStorage.getItem('gobblerHighScoreStory') || '0', 10);
+    highScoreArcade = Number.isFinite(storedArcade) ? storedArcade : 0;
+    highScoreStory = Number.isFinite(storedStory) ? storedStory : 0;
+    if (!localStorage.getItem('gobblerHighScoreArcade')) {
+      const legacy = Number.parseInt(localStorage.getItem('gobblerHighScore') || '0', 10);
+      if (Number.isFinite(legacy) && legacy > 0) {
+        highScoreArcade = legacy;
+        localStorage.setItem('gobblerHighScoreArcade', String(legacy));
+      }
     }
+  } catch (err) {
+    console.warn('[storage] Failed to read localStorage', err);
+    localStorageAvailable = false;
+    highScoreArcade = 0;
+    highScoreStory = 0;
   }
-} catch {
-  highScoreArcade = 0;
-  highScoreStory = 0;
 }
 highScoreValueEl.textContent = `${highScoreArcade} pts`;
 
@@ -192,23 +258,72 @@ const bossOutro = {
   anchorScrollX: 0,
 };
 
-const createSfxPool = (src, count = 4, volume = 0.6) => {
-  const pool = Array.from({ length: count }, () => {
-    const a = new Audio(src);
-    a.preload = 'auto';
-    a.volume = volume;
-    return a;
+const attachAudioHandlers = (audio, entry, label) => {
+  if (!audio) {
+    entry.error = true;
+    return;
+  }
+  audio.addEventListener('canplaythrough', () => {
+    entry.ready = true;
+  }, { once: true });
+  audio.addEventListener('error', (err) => {
+    entry.error = true;
+    console.warn(`[audio] Failed to load ${label}`, err);
   });
+};
+
+const canPlayAudio = (entry) => {
+  if (!entry || entry.error || !entry.audio) return false;
+  return entry.ready || entry.audio.readyState >= 2;
+};
+
+const safePlayAudio = (entry) => {
+  if (!canPlayAudio(entry)) return;
+  try {
+    const playPromise = entry.audio.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {});
+    }
+  } catch {
+    // Ignore autoplay/gesture restrictions.
+  }
+};
+
+const createSfxPool = (src, count = 4, volume = 0.6) => {
+  let pool = [];
+  try {
+    pool = Array.from({ length: count }, () => {
+      const entry = { audio: null, ready: false, error: false };
+      let audio = null;
+      try {
+        audio = new Audio(src);
+      } catch (err) {
+        console.warn('[audio] Failed to create sfx audio', err);
+      }
+      entry.audio = audio;
+      if (audio) {
+        audio.preload = 'auto';
+        audio.volume = volume;
+      }
+      attachAudioHandlers(audio, entry, `sfx:${src}`);
+      return entry;
+    });
+  } catch (err) {
+    console.warn('[audio] Failed to build sfx pool', err);
+    return () => {};
+  }
+  if (!pool.length) return () => {};
   let i = 0;
   return () => {
-    const a = pool[i];
+    const entry = pool[i];
     i = (i + 1) % pool.length;
+    if (!canPlayAudio(entry)) return;
     try {
-      a.currentTime = 0;
-      a.play();
+      entry.audio.currentTime = 0;
     } catch {
-      // Ignore autoplay/gesture restrictions.
+      return;
     }
+    safePlayAudio(entry);
   };
 };
 
@@ -233,59 +348,83 @@ const playBossBonusSfx = createSfxPool('assets/sfx/boss_bonus.wav', 2, 0.8);
 const playStageClearedSfx = createSfxPool('assets/sfx/stage_cleared.mp3', 1, 0.8);
 
 const { play: playDied100Sequence, stop: stopDied100Sequence } = (() => {
-  const first = new Audio('assets/sfx/died_100_times_1.wav');
-  const second = new Audio('assets/sfx/died_100_times_2.mp3');
-  first.preload = 'auto';
-  second.preload = 'auto';
-  second.loop = true;
-  first.volume = 0.8;
-  second.volume = 0.8;
+  const first = { audio: null, ready: false, error: false };
+  const second = { audio: null, ready: false, error: false };
+  try {
+    first.audio = new Audio('assets/sfx/died_100_times_1.wav');
+  } catch (err) {
+    console.warn('[audio] Failed to create died100 first audio', err);
+  }
+  try {
+    second.audio = new Audio('assets/sfx/died_100_times_2.mp3');
+  } catch (err) {
+    console.warn('[audio] Failed to create died100 second audio', err);
+  }
+  if (first.audio) {
+    first.audio.preload = 'auto';
+    first.audio.volume = 0.8;
+  }
+  if (second.audio) {
+    second.audio.preload = 'auto';
+    second.audio.loop = true;
+    second.audio.volume = 0.8;
+  }
+  attachAudioHandlers(first.audio, first, 'died100-first');
+  attachAudioHandlers(second.audio, second, 'died100-second');
   let playing = false;
   const stop = () => {
     playing = false;
     death100ToastActive = false;
     try {
-      first.onended = null;
-      first.pause();
-      first.currentTime = 0;
+      if (first.audio) {
+        first.audio.onended = null;
+        first.audio.pause();
+        first.audio.currentTime = 0;
+      }
     } catch {
       // ignore autoplay restrictions
     }
     try {
-      second.pause();
-      second.currentTime = 0;
+      if (second.audio) {
+        second.audio.pause();
+        second.audio.currentTime = 0;
+      }
     } catch {
       // ignore autoplay restrictions
     }
   };
   const play = () => {
     try {
-      first.onended = null;
+      if (first.audio) first.audio.onended = null;
       if (playing) {
-        first.pause();
-        second.pause();
+        if (first.audio) first.audio.pause();
+        if (second.audio) second.audio.pause();
       }
       playing = true;
       try {
-        arcadeMusic.audio.pause();
+        if (arcadeMusic.audio) arcadeMusic.audio.pause();
         arcadeMusic.pending = false;
         arcadeMusic.fading = false;
       } catch {
         // ignore
       }
-      first.currentTime = 0;
-      second.currentTime = 0;
-      first.onended = () => {
-        playing = false;
-        death100ToastActive = true;
-        try {
-          second.currentTime = 0;
-          second.play();
-        } catch {
-          // ignore autoplay restrictions
-        }
-      };
-      first.play();
+      if (first.audio) first.audio.currentTime = 0;
+      if (second.audio) second.audio.currentTime = 0;
+      if (first.audio) {
+        first.audio.onended = () => {
+          playing = false;
+          death100ToastActive = true;
+          if (second.audio) {
+            try {
+              second.audio.currentTime = 0;
+            } catch {
+              // ignore
+            }
+            safePlayAudio(second);
+          }
+        };
+      }
+      safePlayAudio(first);
     } catch {
       // ignore autoplay restrictions
     }
@@ -296,52 +435,99 @@ const { play: playDied100Sequence, stop: stopDied100Sequence } = (() => {
 const titleImage = new Image();
 let titleImageReady = false;
 titleImage.onload = () => { titleImageReady = true; };
+titleImage.onerror = (err) => {
+  titleImageReady = false;
+  console.warn('[image] Failed to load title image', err);
+};
 titleImage.src = 'assets/game_title_1.png';
 const continueImage = new Image();
 let continueImageReady = false;
 continueImage.onload = () => { continueImageReady = true; };
+continueImage.onerror = (err) => {
+  continueImageReady = false;
+  console.warn('[image] Failed to load continue image', err);
+};
 continueImage.src = 'assets/contine.png';
 
 const companyImage = new Image();
 let companyImageReady = false;
 companyImage.onload = () => { companyImageReady = true; };
+companyImage.onerror = (err) => {
+  companyImageReady = false;
+  console.warn('[image] Failed to load company image', err);
+};
 companyImage.src = 'assets/company_screen.png';
 
 const loadingImage = new Image();
 let loadingImageReady = false;
 loadingImage.onload = () => { loadingImageReady = true; };
+loadingImage.onerror = (err) => {
+  loadingImageReady = false;
+  console.warn('[image] Failed to load loading image', err);
+};
 loadingImage.src = 'assets/loading_screen.png';
 
 const storyBgImage = new Image();
 let storyBgReady = false;
 storyBgImage.onload = () => { storyBgReady = true; };
+storyBgImage.onerror = (err) => {
+  storyBgReady = false;
+  console.warn('[image] Failed to load story background', err);
+};
 storyBgImage.src = 'assets/level1_bg.png';
 
 const levelMusic = (() => {
-  const audio = new Audio('assets/sfx/level1_part1_music.mp3');
-  audio.preload = 'auto';
-  audio.loop = true;
+  let audio = null;
+  try {
+    audio = new Audio('assets/sfx/level1_part1_music.mp3');
+  } catch (err) {
+    console.warn('[audio] Failed to create level music', err);
+  }
   const baseVol = 0.6;
-  audio.volume = baseVol;
-  return { audio, baseVol, pending: false, delay: 0, fade: 0, fadeDur: 0.8, fading: false };
+  const entry = { audio, baseVol, pending: false, delay: 0, fade: 0, fadeDur: 0.8, fading: false, ready: false, error: false };
+  if (audio) {
+    audio.preload = 'auto';
+    audio.loop = true;
+    audio.volume = baseVol;
+  }
+  attachAudioHandlers(audio, entry, 'level-music');
+  return entry;
 })();
 
 const arcadeMusic = (() => {
-  const audio = new Audio('assets/sfx/arcade_music.mp3');
-  audio.preload = 'auto';
-  audio.loop = true;
+  let audio = null;
+  try {
+    audio = new Audio('assets/sfx/arcade_music.mp3');
+  } catch (err) {
+    console.warn('[audio] Failed to create arcade music', err);
+  }
   const baseVol = 0.6;
-  audio.volume = baseVol;
-  return { audio, baseVol, pending: false, delay: 0, fade: 0, fadeDur: 0.8, fading: false };
+  const entry = { audio, baseVol, pending: false, delay: 0, fade: 0, fadeDur: 0.8, fading: false, ready: false, error: false };
+  if (audio) {
+    audio.preload = 'auto';
+    audio.loop = true;
+    audio.volume = baseVol;
+  }
+  attachAudioHandlers(audio, entry, 'arcade-music');
+  return entry;
 })();
 
 const dialogueMusic = (() => {
-  const audio = new Audio('assets/sfx/level1_part2_music.mp3');
-  audio.preload = 'auto';
-  audio.loop = true;
+  let audio = null;
+  try {
+    audio = new Audio('assets/sfx/level1_part2_music.mp3');
+  } catch (err) {
+    console.warn('[audio] Failed to create dialogue music', err);
+  }
   const baseVol = 0.5;
-  audio.volume = baseVol;
-  return { audio, baseVol, pending: false, delay: 0, fade: 0, fadeDur: 0.8, fading: false };
+  const entry = { audio, baseVol, pending: false, delay: 0, fade: 0, fadeDur: 0.8, fading: false, ready: false, error: false };
+  if (audio) {
+    audio.preload = 'auto';
+    audio.loop = true;
+    audio.volume = baseVol;
+  }
+  attachAudioHandlers(audio, entry, 'dialogue-music');
+  return entry;
 })();
 
 const burst = createBurst();
@@ -369,7 +555,13 @@ let currentDpr = 1;
 const START_MENU_BUTTON_SHADING = 'solid'; // 'solid' | 'hard' | 'smooth'
 const startMenuButtonCache = new Map();
 const startMenuTextCache = new Map();
-const startMenuTextMeasureCtx = document.createElement('canvas').getContext('2d') || ctx;
+let startMenuTextMeasureCtx = null;
+try {
+  startMenuTextMeasureCtx = document.createElement('canvas').getContext('2d');
+} catch (err) {
+  console.warn('[canvas] Failed to create start menu measure context', err);
+}
+if (!startMenuTextMeasureCtx) startMenuTextMeasureCtx = ctx;
 const clearStartMenuCaches = () => {
   startMenuButtonCache.clear();
   startMenuTextCache.clear();
@@ -393,6 +585,7 @@ const addWindowListener = (type, listener, options) => {
 };
 
 listeners.resize = function resizeHandler() {
+  if (!canvasReady || !ctx) return;
   updateQuality();
   const dpr = Math.max(1, Math.min(quality.dprCap, window.devicePixelRatio || 1));
   currentDpr = dpr;
@@ -435,10 +628,22 @@ const setScore = (n) => {
   if (isArcade() && next > highScoreArcade) {
     highScoreArcade = next;
     highScoreValueEl.textContent = `${highScoreArcade} pts`;
-    try { localStorage.setItem('gobblerHighScoreArcade', String(highScoreArcade)); } catch {}
+    if (localStorageAvailable) {
+      try { localStorage.setItem('gobblerHighScoreArcade', String(highScoreArcade)); }
+      catch (err) {
+        console.warn('[storage] Failed to write arcade high score', err);
+        localStorageAvailable = false;
+      }
+    }
   } else if (!isArcade() && next > highScoreStory) {
     highScoreStory = next;
-    try { localStorage.setItem('gobblerHighScoreStory', String(highScoreStory)); } catch {}
+    if (localStorageAvailable) {
+      try { localStorage.setItem('gobblerHighScoreStory', String(highScoreStory)); }
+      catch (err) {
+        console.warn('[storage] Failed to write story high score', err);
+        localStorageAvailable = false;
+      }
+    }
   }
 };
 const showScore = (show) => {
@@ -451,7 +656,7 @@ const setScoreOpacity = (v) => {
   highScoreEl.style.opacity = v;
 };
 const setRickRollVisible = (show) => {
-  rickRollEl.style.display = show ? 'block' : 'none';
+  rickRollEl.style.display = (show && rickRollReady) ? 'block' : 'none';
 };
 
 const applyHudMode = () => {
@@ -560,6 +765,33 @@ player.mouth.pulseDur = MOUTH.pulseDur;
 const npcs = [];
 const reds = [];
 const blues = [];
+const isFiniteEntity = (o) => o && Number.isFinite(o.x) && Number.isFinite(o.y) && Number.isFinite(o.r);
+const pruneInvalidEntities = (list, label) => {
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (!isFiniteEntity(list[i])) {
+      console.warn(`[state] Removing ${label} with invalid position`, list[i]);
+      list.splice(i, 1);
+    }
+  }
+};
+const ensureFinitePlayerState = () => {
+  if (!Number.isFinite(player.x) || !Number.isFinite(player.y)) {
+    console.warn('[state] Resetting player position due to invalid coordinates', { x: player.x, y: player.y });
+    player.x = 160;
+    player.y = groundY() - player.r;
+    player.vy = 0;
+  }
+  if (!Number.isFinite(player.r) || !(player.r > 0)) {
+    console.warn('[state] Resetting player radius due to invalid value', player.r);
+    player.r = player.baseR;
+  }
+};
+const validateEntityPositions = () => {
+  ensureFinitePlayerState();
+  pruneInvalidEntities(npcs, 'npc');
+  pruneInvalidEntities(reds, 'red');
+  pruneInvalidEntities(blues, 'blue');
+};
 listeners.resize();
 let npcT = 0, redT = 0, blueT = 0;
 let trail = null;
@@ -2027,7 +2259,13 @@ listeners.keydown = function keydownHandler(e) {
     if (isArcade() && (gameState.value === 'playing' || gameState.value === 'cutscene')) {
       highScoreArcade = 0;
       highScoreValueEl.textContent = `${highScoreArcade} pts`;
-      try { localStorage.setItem('gobblerHighScoreArcade', String(highScoreArcade)); } catch {}
+      if (localStorageAvailable) {
+        try { localStorage.setItem('gobblerHighScoreArcade', String(highScoreArcade)); }
+        catch (err) {
+          console.warn('[storage] Failed to clear arcade high score', err);
+          localStorageAvailable = false;
+        }
+      }
       return;
     }
   }
@@ -2177,11 +2415,19 @@ if (import.meta && import.meta.hot) {
 }
 
 let last = performance.now();
-beginSplashScreens();
+if (canvasReady && ctx) {
+  beginSplashScreens();
+}
 
 const tick = (now) => {
-  const dt = Math.min(0.033, (now - last) / 1000);
+  if (!canvasReady || !ctx) return;
+  const rawDt = (now - last) / 1000;
   last = now;
+  if (!Number.isFinite(rawDt) || rawDt <= 0) {
+    requestAnimationFrame(tick);
+    return;
+  }
+  const dt = Math.min(0.1, rawDt);
 
   if (gameState.value === 'splashCompany' || gameState.value === 'splashLoading') {
     splash.t += dt;
@@ -2337,18 +2583,16 @@ const tick = (now) => {
     levelMusic.delay = Math.max(0, levelMusic.delay - dt);
     if (levelMusic.delay <= 0) {
       levelMusic.pending = false;
-      try {
+      if (canPlayAudio(levelMusic) && levelMusic.audio) {
         levelMusic.audio.volume = levelMusic.baseVol;
-        levelMusic.audio.play();
-      } catch {
-        // ignore autoplay restrictions
+        safePlayAudio(levelMusic);
       }
     }
   }
   if (levelMusic.fading) {
     levelMusic.fade = Math.max(0, levelMusic.fade - dt);
     const t = (levelMusic.fadeDur > 0) ? (levelMusic.fade / levelMusic.fadeDur) : 0;
-    levelMusic.audio.volume = levelMusic.baseVol * t;
+    if (levelMusic.audio) levelMusic.audio.volume = levelMusic.baseVol * t;
     if (levelMusic.fade <= 0) {
       levelMusic.fading = false;
       try { levelMusic.audio.pause(); } catch {}
@@ -2358,18 +2602,16 @@ const tick = (now) => {
     arcadeMusic.delay = Math.max(0, arcadeMusic.delay - dt);
     if (arcadeMusic.delay <= 0) {
       arcadeMusic.pending = false;
-      try {
+      if (canPlayAudio(arcadeMusic) && arcadeMusic.audio) {
         arcadeMusic.audio.volume = arcadeMusic.baseVol;
-        arcadeMusic.audio.play();
-      } catch {
-        // ignore autoplay restrictions
+        safePlayAudio(arcadeMusic);
       }
     }
   }
   if (arcadeMusic.fading) {
     arcadeMusic.fade = Math.max(0, arcadeMusic.fade - dt);
     const t = (arcadeMusic.fadeDur > 0) ? (arcadeMusic.fade / arcadeMusic.fadeDur) : 0;
-    arcadeMusic.audio.volume = arcadeMusic.baseVol * t;
+    if (arcadeMusic.audio) arcadeMusic.audio.volume = arcadeMusic.baseVol * t;
     if (arcadeMusic.fade <= 0) {
       arcadeMusic.fading = false;
       try { arcadeMusic.audio.pause(); } catch {}
@@ -2380,18 +2622,16 @@ const tick = (now) => {
     dialogueMusic.delay = Math.max(0, dialogueMusic.delay - dt);
     if (dialogueMusic.delay <= 0) {
       dialogueMusic.pending = false;
-      try {
+      if (canPlayAudio(dialogueMusic) && dialogueMusic.audio) {
         dialogueMusic.audio.volume = dialogueMusic.baseVol;
-        dialogueMusic.audio.play();
-      } catch {
-        // ignore autoplay restrictions
+        safePlayAudio(dialogueMusic);
       }
     }
   }
   if (dialogueMusic.fading) {
     dialogueMusic.fade = Math.max(0, dialogueMusic.fade - dt);
     const t = (dialogueMusic.fadeDur > 0) ? (dialogueMusic.fade / dialogueMusic.fadeDur) : 0;
-    dialogueMusic.audio.volume = dialogueMusic.baseVol * t;
+    if (dialogueMusic.audio) dialogueMusic.audio.volume = dialogueMusic.baseVol * t;
     if (dialogueMusic.fade <= 0) {
       dialogueMusic.fading = false;
       try { dialogueMusic.audio.pause(); } catch {}
@@ -2713,6 +2953,7 @@ const tick = (now) => {
     });
 
     updateMouth(player.mouth, dt, MOUTH, clamp);
+    validateEntityPositions();
 
     if (isDialogueActive()) {
       const entry = dialogueScript[dialogueIndex];
@@ -2812,12 +3053,14 @@ const tick = (now) => {
         dialogueMusic.delay = 0;
         dialogueMusic.fade = 0;
         dialogueMusic.fading = false;
-        try {
-          dialogueMusic.audio.currentTime = 0;
-          dialogueMusic.audio.volume = dialogueMusic.baseVol;
-          dialogueMusic.audio.play();
-        } catch {
-          // ignore
+        if (dialogueMusic.audio) {
+          try {
+            dialogueMusic.audio.currentTime = 0;
+            dialogueMusic.audio.volume = dialogueMusic.baseVol;
+          } catch {
+            // ignore
+          }
+          safePlayAudio(dialogueMusic);
         }
         cutsceneFade.active = true;
         cutsceneFade.phase = 'in';
@@ -2941,6 +3184,7 @@ const tick = (now) => {
     }
   }
 
+  validateEntityPositions();
   draw();
   requestAnimationFrame(tick);
 };
@@ -3830,7 +4074,13 @@ const buildStartMenuButtonTexture = (w, h) => {
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(texW * currentDpr);
   canvas.height = Math.ceil(texH * currentDpr);
-  const c = canvas.getContext('2d');
+  let c = null;
+  try {
+    c = canvas.getContext('2d');
+  } catch (err) {
+    console.warn('[canvas] Failed to create start menu button context', err);
+  }
+  if (!c) return null;
   c.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
   c.clearRect(0, 0, texW, texH);
 
@@ -3875,6 +4125,7 @@ const getStartMenuButtonTexture = (w, h) => {
   const cached = startMenuButtonCache.get(key);
   if (cached) return cached;
   const texture = buildStartMenuButtonTexture(w, h);
+  if (!texture) return null;
   startMenuButtonCache.set(key, texture);
   return texture;
 };
@@ -3887,11 +4138,13 @@ const getStartMenuTextStyle = (label, maxTextW, height) => {
   const minFontSize = Math.max(12, Math.round(height * 0.3));
   let fontSize = Math.round(height * 0.52);
   let font = `800 ${fontSize}px ${fontFamily}`;
-  startMenuTextMeasureCtx.font = font;
-  while (startMenuTextMeasureCtx.measureText(label).width > maxTextW && fontSize > minFontSize) {
-    fontSize -= 1;
-    font = `800 ${fontSize}px ${fontFamily}`;
+  if (startMenuTextMeasureCtx) {
     startMenuTextMeasureCtx.font = font;
+    while (startMenuTextMeasureCtx.measureText(label).width > maxTextW && fontSize > minFontSize) {
+      fontSize -= 1;
+      font = `800 ${fontSize}px ${fontFamily}`;
+      startMenuTextMeasureCtx.font = font;
+    }
   }
   const style = {
     font,
@@ -3902,15 +4155,25 @@ const getStartMenuTextStyle = (label, maxTextW, height) => {
 };
 
 const drawStartMenuNeonButton = (ctx, button, label, pressed) => {
-  const { canvas, pad } = getStartMenuButtonTexture(button.w, button.h);
+  const texture = getStartMenuButtonTexture(button.w, button.h);
   const pressOffset = pressed ? Math.max(1, Math.round(button.h * 0.06)) : 0;
-  ctx.drawImage(
-    canvas,
-    button.x - pad + pressOffset,
-    button.y - pad + pressOffset,
-    button.w + pad * 2,
-    button.h + pad * 2
-  );
+  if (texture && texture.canvas) {
+    const { canvas, pad } = texture;
+    ctx.drawImage(
+      canvas,
+      button.x - pad + pressOffset,
+      button.y - pad + pressOffset,
+      button.w + pad * 2,
+      button.h + pad * 2
+    );
+  } else {
+    const fallbackR = button.h * 0.5;
+    ctx.save();
+    ctx.fillStyle = pressed ? '#f28b3c' : '#ff9f1f';
+    roundRectPath(ctx, button.x + pressOffset, button.y + pressOffset, button.w, button.h, fallbackR);
+    ctx.fill();
+    ctx.restore();
+  }
 
   const maxTextW = button.w - Math.max(24, button.h * 0.7);
   const textStyle = getStartMenuTextStyle(label, maxTextW, button.h);
@@ -4013,4 +4276,6 @@ const drawStartMenuChoice = (ctx, w, h, alpha = 1) => {
   ctx.restore();
 };
 
-requestAnimationFrame(tick);
+if (canvasReady && ctx) {
+  requestAnimationFrame(tick);
+}

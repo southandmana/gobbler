@@ -73,10 +73,17 @@ export const drawWorldEntities = (ctx, w, h, state, deps) => {
           const c = document.createElement('canvas');
           c.width = size;
           c.height = size;
-          const cctx = c.getContext('2d');
-          drawDynamiteBomb(cctx, size * 0.5, size * 0.5, o.r);
-          o._bombSprite = c;
-          o._bombSpriteR = o.r;
+          let cctx = null;
+          try {
+            cctx = c.getContext('2d');
+          } catch (err) {
+            console.warn('[world] Failed to create bomb sprite context', err);
+          }
+          if (cctx) {
+            drawDynamiteBomb(cctx, size * 0.5, size * 0.5, o.r);
+            o._bombSprite = c;
+            o._bombSpriteR = o.r;
+          }
         }
       }
       const canUseBombSprite = (o._bombSprite instanceof HTMLCanvasElement)
@@ -85,7 +92,12 @@ export const drawWorldEntities = (ctx, w, h, state, deps) => {
         && o._bombSpriteR === o.r;
       if (canUseBombSprite) {
         const size = o._bombSprite.width;
-        ctx.drawImage(o._bombSprite, o.x - size * 0.5, o.y - size * 0.5);
+        try {
+          ctx.drawImage(o._bombSprite, o.x - size * 0.5, o.y - size * 0.5);
+        } catch (err) {
+          console.warn('[world] Failed to draw bomb sprite', err);
+          drawDynamiteBomb(ctx, o.x, o.y, o.r);
+        }
       } else {
         drawDynamiteBomb(ctx, o.x, o.y, o.r);
       }
@@ -111,11 +123,18 @@ export const drawWorldEntities = (ctx, w, h, state, deps) => {
           const c = document.createElement('canvas');
           c.width = size;
           c.height = size;
-          const cctx = c.getContext('2d');
-          cctx.fillStyle = '#ffbf4a';
-          drawStar(cctx, size * 0.5, size * 0.5, Math.max(0, o.r), null, 0);
-          o._starSprite = c;
-          o._starSpriteR = o.r;
+          let cctx = null;
+          try {
+            cctx = c.getContext('2d');
+          } catch (err) {
+            console.warn('[world] Failed to create star sprite context', err);
+          }
+          if (cctx) {
+            cctx.fillStyle = '#ffbf4a';
+            drawStar(cctx, size * 0.5, size * 0.5, Math.max(0, o.r), null, 0);
+            o._starSprite = c;
+            o._starSpriteR = o.r;
+          }
         }
       }
       const canUseStarSprite = (o._starSprite instanceof HTMLCanvasElement)
@@ -127,10 +146,22 @@ export const drawWorldEntities = (ctx, w, h, state, deps) => {
         if (o.specks && o.specks.length) {
           ctx.save();
           ctx.globalCompositeOperation = 'screen';
-          ctx.drawImage(o._starSprite, o.x - size * 0.5, o.y - size * 0.5);
+          try {
+            ctx.drawImage(o._starSprite, o.x - size * 0.5, o.y - size * 0.5);
+          } catch (err) {
+            console.warn('[world] Failed to draw star sprite', err);
+            ctx.restore();
+            drawStar(ctx, o.x, o.y, Math.max(0, o.r), null, 0);
+            continue;
+          }
           ctx.restore();
         } else {
-          ctx.drawImage(o._starSprite, o.x - size * 0.5, o.y - size * 0.5);
+          try {
+            ctx.drawImage(o._starSprite, o.x - size * 0.5, o.y - size * 0.5);
+          } catch (err) {
+            console.warn('[world] Failed to draw star sprite', err);
+            drawStar(ctx, o.x, o.y, Math.max(0, o.r), null, 0);
+          }
         }
       } else {
         drawStar(ctx, o.x, o.y, Math.max(0, o.r), null, 0);

@@ -69,10 +69,24 @@ const ensureGroundTilePattern = (ctx, tileW, tileH) => {
   const c = groundTileCache.canvas;
   c.width = Math.max(1, Math.ceil(tileW * dpr));
   c.height = Math.max(1, Math.ceil(tileH * dpr));
-  const cctx = c.getContext('2d');
+  let cctx = null;
+  try {
+    cctx = c.getContext('2d');
+  } catch (err) {
+    console.warn('[background] Failed to create ground tile context', err);
+  }
+  if (!cctx) {
+    groundTileCache.pattern = null;
+    return;
+  }
   cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   drawGroundPlateTile(cctx, tileW, tileH);
-  groundTileCache.pattern = ctx.createPattern(c, 'repeat');
+  try {
+    groundTileCache.pattern = ctx.createPattern(c, 'repeat');
+  } catch (err) {
+    console.warn('[background] Failed to create ground tile pattern', err);
+    groundTileCache.pattern = null;
+  }
   if (groundTileCache.pattern && typeof groundTileCache.pattern.setTransform === 'function') {
     const m = new DOMMatrix();
     m.a = 1 / dpr;
@@ -123,7 +137,13 @@ const ensureSkyCache = (cache, width, height) => {
   cache.sky.h = height;
   c.width = width;
   c.height = height;
-  const cctx = c.getContext('2d');
+  let cctx = null;
+  try {
+    cctx = c.getContext('2d');
+  } catch (err) {
+    console.warn('[background] Failed to create sky cache context', err);
+  }
+  if (!cctx) return;
   drawSky(cctx, width, height);
 };
 
@@ -136,7 +156,13 @@ const ensureStarsCache = (cache, width, groundY, stars) => {
   cache.stars.starsRef = stars;
   c.width = cache.stars.w;
   c.height = cache.stars.h;
-  const cctx = c.getContext('2d');
+  let cctx = null;
+  try {
+    cctx = c.getContext('2d');
+  } catch (err) {
+    console.warn('[background] Failed to create stars cache context', err);
+  }
+  if (!cctx) return;
   cctx.clearRect(0, 0, c.width, c.height);
   cctx.save();
   cctx.globalAlpha = 0.6;
@@ -287,7 +313,13 @@ const drawStoryBackdrop = (ctx, width, groundY, image, grade = DEFAULT_STORY_BG_
   ctx.rect(0, 0, width, groundY);
   ctx.clip();
   ctx.filter = filter;
-  ctx.drawImage(image, x, y, drawW, drawH);
+  try {
+    ctx.drawImage(image, x, y, drawW, drawH);
+  } catch (err) {
+    console.warn('[background] Failed to draw story backdrop', err);
+    ctx.restore();
+    return false;
+  }
   ctx.filter = 'none';
 
   const haze = ctx.createLinearGradient(0, 0, 0, groundY);
