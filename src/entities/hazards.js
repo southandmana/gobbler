@@ -19,7 +19,11 @@ const resolveAttackActive = (attackActive) => {
 export const driftReds = (reds, move) => {
   for (let i = reds.length - 1; i >= 0; i--) {
     reds[i].x -= move;
-    if (reds[i].x < -140) reds.splice(i, 1);
+    if (reds[i].x < -140) {
+      delete reds[i]._bombSprite;
+      delete reds[i]._bombSpriteR;
+      reds.splice(i, 1);
+    }
   }
 };
 
@@ -56,7 +60,12 @@ export const updateReds = (reds, player, dt, move, deps) => {
 
     if (o.state === 'fly') {
       o.x -= move;
-      if (o.x < -140) { reds.splice(i, 1); continue; }
+      if (o.x < -140) {
+        delete reds[i]._bombSprite;
+        delete reds[i]._bombSpriteR;
+        reds.splice(i, 1);
+        continue;
+      }
       if (!player.alive || player._beingEaten) continue;
 
       const prC = player.r * (0.5 * (1 + player.squashY));
@@ -109,6 +118,8 @@ export const updateReds = (reds, player, dt, move, deps) => {
             if (startLineBurst) startLineBurst(n.x, n.y, Math.max(0.7, o.r / 18));
             if (startNpcShatter) startNpcShatter(n.x, n.y, n.r);
             if (!startLineBurst && !startNpcShatter && startBurst) startBurst(n.x, n.y, 0.55);
+            delete reds[i]._bombSprite;
+            delete reds[i]._bombSpriteR;
             reds.splice(i, 1);
             exploded = true;
             break;
@@ -127,6 +138,8 @@ export const updateReds = (reds, player, dt, move, deps) => {
           const d = deps.dist(o.x, o.y, bx, by);
           if (d <= (o.r + br)) {
             if (onBossHit) onBossHit(o.x, o.y, o.r);
+            delete reds[i]._bombSprite;
+            delete reds[i]._bombSpriteR;
             reds.splice(i, 1);
             continue;
           }
@@ -164,6 +177,8 @@ export const updateReds = (reds, player, dt, move, deps) => {
           else if (!hitGround && playBombLeavesSfx) playBombLeavesSfx();
           if (hitGround && startLineBurst) startLineBurst(o.x, o.y, Math.max(0.6, o.r / 18));
           else if (startBurst) startBurst(o.x, o.y, 0.45);
+          delete reds[i]._bombSprite;
+          delete reds[i]._bombSpriteR;
           reds.splice(i, 1);
           continue;
         }
@@ -200,6 +215,8 @@ export const updateReds = (reds, player, dt, move, deps) => {
       o.r = lerp(o.r0, 0, tt);
 
       if (o.t >= 1) {
+        delete reds[i]._bombSprite;
+        delete reds[i]._bombSpriteR;
         reds.splice(i, 1);
         if (playEatBombSfx) playEatBombSfx();
         if (isPlayerInvulnerable) continue;

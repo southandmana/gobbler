@@ -4,7 +4,7 @@ import { makeStars, createBackgroundCache, drawBackdrop, drawGround, drawScreenT
 import { drawWorldEntities } from './render/world.js';
 import { drawUI } from './render/ui.js';
 import { createBurst, startBurst, updateBurst, drawBurst, createShatter, startHeadShatter, updateShatter, drawShatter, createLineBurst, startLineBurst, updateLineBurst, drawLineBurst, createFloaters, popText, updateFloaters, drawFloaters, createSparkles, startSparkles, updateSparkles, drawSparkles, createDustPuffs, startDustPuff, updateDustPuffs, drawDustPuffs } from './render/effects.js';
-import { createPlayer, drawPlayer2, DEFAULT_PALETTE } from './entities/player.js';
+import { createPlayer, drawPlayer2, DEFAULT_PALETTE, clearPlayerSpriteCache } from './entities/player.js';
 import { updateMouth, triggerChomp } from './entities/mouth.js';
 import { makeNPC, updateNPCs, driftNPCs, drawCharacter, NPC_PALETTE } from './entities/npc.js';
 import { makeRed, updateReds, driftReds, drawDynamiteBomb } from './entities/hazards.js';
@@ -402,9 +402,17 @@ listeners.resize = function resizeHandler() {
   canvas.style.height = innerHeight + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   clearStartMenuCaches();
+  clearPlayerSpriteCache();
+  for (const o of reds) {
+    delete o._bombSprite;
+    delete o._bombSpriteR;
+  }
+  for (const o of blues) {
+    delete o._starSprite;
+    delete o._starSpriteR;
+  }
 };
 addWindowListener('resize', listeners.resize, defaultListenerOptions);
-listeners.resize();
 
 const START_VIEW_OFFSET_RATIO = 1.0;
 const getStartViewOffset = () => {
@@ -552,6 +560,7 @@ player.mouth.pulseDur = MOUTH.pulseDur;
 const npcs = [];
 const reds = [];
 const blues = [];
+listeners.resize();
 let npcT = 0, redT = 0, blueT = 0;
 let trail = null;
 let lastSpawnWorldX = -1e9;

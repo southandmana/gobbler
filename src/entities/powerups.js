@@ -40,7 +40,11 @@ const clampPlayerToBounds = (player, clamp, groundY) => {
 export const driftBlues = (blues, move) => {
   for (let i = blues.length - 1; i >= 0; i--) {
     blues[i].x -= move;
-    if (blues[i].x < -140) blues.splice(i, 1);
+    if (blues[i].x < -140) {
+      delete blues[i]._starSprite;
+      delete blues[i]._starSpriteR;
+      blues.splice(i, 1);
+    }
   }
 };
 
@@ -57,7 +61,12 @@ export const updateBlues = (blues, player, dt, move, deps) => {
 
     if (o.state === 'fly') {
       o.x -= move;
-      if (o.x < -140) { blues.splice(i, 1); continue; }
+      if (o.x < -140) {
+        delete blues[i]._starSprite;
+        delete blues[i]._starSpriteR;
+        blues.splice(i, 1);
+        continue;
+      }
       if (!player.alive || player._beingEaten) continue;
 
       const prC = player.r * (0.5 * (1 + player.squashY));
@@ -81,6 +90,8 @@ export const updateBlues = (blues, player, dt, move, deps) => {
       o.r = lerp(o.r0, 0, tt);
 
       if (o.t >= 1) {
+        delete blues[i]._starSprite;
+        delete blues[i]._starSpriteR;
         blues.splice(i, 1);
         if (playEatStarSfx) playEatStarSfx();
         const before = player.r;

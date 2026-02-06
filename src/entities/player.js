@@ -5,6 +5,12 @@ const player2Ctx = player2Canvas.getContext('2d');
 const spriteCache = new Map();
 const paletteIds = new WeakMap();
 let paletteIdSeq = 1;
+let cachedDpr = 1;
+
+export const clearPlayerSpriteCache = () => {
+  spriteCache.clear();
+  cachedDpr = 1;
+};
 
 const getPaletteId = (palette) => {
   if (!paletteIds.has(palette)) paletteIds.set(palette, paletteIdSeq++);
@@ -147,8 +153,14 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
   if (!(r > 0.01)) return;
   const o = clamp(open01, 0, 1);
   const pad = r * 0.35;
-  const size = Math.ceil(r * 2 + pad * 2);
+  const size = Math.min(Math.ceil(r * 2 + pad * 2), 2000);
   if (size <= 0) return;
+
+  const currentDpr = Math.max(1, ctx.getTransform().a || 1);
+  if (currentDpr !== cachedDpr) {
+    spriteCache.clear();
+    cachedDpr = currentDpr;
+  }
 
   const wingFrame = getWingFrame(wing);
   const isClosed = o < 0.08;
@@ -156,9 +168,12 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
 
   if (isClosed) {
     const paletteId = getPaletteId(palette);
-    const key = `${size}|${r}|${paletteId}|${wingFrame}`;
+    const key = `${size}|${r}|${paletteId}|${wingFrame}|${currentDpr}`;
     let cached = spriteCache.get(key);
-    if (!cached) {
+    const cachedValid = (cached instanceof HTMLCanvasElement)
+      && cached.width > 0
+      && cached.height > 0;
+    if (!cachedValid) {
       cached = document.createElement('canvas');
       cached.width = size;
       cached.height = size;
@@ -172,6 +187,24 @@ export const drawPlayer2 = (ctx, x, y, r, dirRad, open01, squashY = 1, palette =
       player2Canvas.height = size;
     }
     renderPlayerSprite(player2Ctx, size, r, palette, o, wingFrame);
+  }
+
+  if (!(sourceCanvas instanceof HTMLCanvasElement) || sourceCanvas.width <= 0 || sourceCanvas.height <= 0) {
+    if (isClosed) {
+      const paletteId = getPaletteId(palette);
+      const key = `${size}|${r}|${paletteId}|${wingFrame}|${currentDpr}`;
+      const regenerated = document.createElement('canvas');
+      regenerated.width = size;
+      regenerated.height = size;
+      renderPlayerSprite(regenerated.getContext('2d'), size, r, palette, 0, wingFrame);
+      spriteCache.set(key, regenerated);
+      sourceCanvas = regenerated;
+    } else {
+      player2Canvas.width = size;
+      player2Canvas.height = size;
+      renderPlayerSprite(player2Ctx, size, r, palette, o, wingFrame);
+      sourceCanvas = player2Canvas;
+    }
   }
 
   ctx.save();

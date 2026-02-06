@@ -64,18 +64,31 @@ export const drawWorldEntities = (ctx, w, h, state, deps) => {
         drawDynamiteBomb(ctx, o.x, o.y, Math.max(0, o.r));
         continue;
       }
-      if (!o._bombSprite || o._bombSpriteR !== o.r) {
-        const size = Math.ceil(o.r * 4);
-        const c = document.createElement('canvas');
-        c.width = size;
-        c.height = size;
-        const cctx = c.getContext('2d');
-        drawDynamiteBomb(cctx, size * 0.5, size * 0.5, o.r);
-        o._bombSprite = c;
-        o._bombSpriteR = o.r;
+      const bombSpriteValid = (o._bombSprite instanceof HTMLCanvasElement)
+        && o._bombSprite.width > 0
+        && o._bombSprite.height > 0;
+      if ((!bombSpriteValid || o._bombSpriteR !== o.r) && o.r > 0) {
+        const size = Math.min(Math.ceil(o.r * 4), 2000);
+        if (size > 0) {
+          const c = document.createElement('canvas');
+          c.width = size;
+          c.height = size;
+          const cctx = c.getContext('2d');
+          drawDynamiteBomb(cctx, size * 0.5, size * 0.5, o.r);
+          o._bombSprite = c;
+          o._bombSpriteR = o.r;
+        }
       }
-      const size = o._bombSprite.width;
-      ctx.drawImage(o._bombSprite, o.x - size * 0.5, o.y - size * 0.5);
+      const canUseBombSprite = (o._bombSprite instanceof HTMLCanvasElement)
+        && o._bombSprite.width > 0
+        && o._bombSprite.height > 0
+        && o._bombSpriteR === o.r;
+      if (canUseBombSprite) {
+        const size = o._bombSprite.width;
+        ctx.drawImage(o._bombSprite, o.x - size * 0.5, o.y - size * 0.5);
+      } else {
+        drawDynamiteBomb(ctx, o.x, o.y, o.r);
+      }
     }
     if (fadeEntitiesAlpha < 1) ctx.restore();
 
@@ -89,25 +102,38 @@ export const drawWorldEntities = (ctx, w, h, state, deps) => {
       if (o.specks && o.specks.length) {
         drawStarSpecks(ctx, o.x, o.y, Math.max(0, o.r), o.specks, waveT);
       }
-      if (!o._starSprite || o._starSpriteR !== o.r) {
-        const size = Math.ceil(o.r * 3);
-        const c = document.createElement('canvas');
-        c.width = size;
-        c.height = size;
-        const cctx = c.getContext('2d');
-        cctx.fillStyle = '#ffbf4a';
-        drawStar(cctx, size * 0.5, size * 0.5, Math.max(0, o.r), null, 0);
-        o._starSprite = c;
-        o._starSpriteR = o.r;
+      const starSpriteValid = (o._starSprite instanceof HTMLCanvasElement)
+        && o._starSprite.width > 0
+        && o._starSprite.height > 0;
+      if ((!starSpriteValid || o._starSpriteR !== o.r) && o.r > 0) {
+        const size = Math.min(Math.ceil(o.r * 3), 2000);
+        if (size > 0) {
+          const c = document.createElement('canvas');
+          c.width = size;
+          c.height = size;
+          const cctx = c.getContext('2d');
+          cctx.fillStyle = '#ffbf4a';
+          drawStar(cctx, size * 0.5, size * 0.5, Math.max(0, o.r), null, 0);
+          o._starSprite = c;
+          o._starSpriteR = o.r;
+        }
       }
-      const size = o._starSprite.width;
-      if (o.specks && o.specks.length) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'screen';
-        ctx.drawImage(o._starSprite, o.x - size * 0.5, o.y - size * 0.5);
-        ctx.restore();
+      const canUseStarSprite = (o._starSprite instanceof HTMLCanvasElement)
+        && o._starSprite.width > 0
+        && o._starSprite.height > 0
+        && o._starSpriteR === o.r;
+      if (canUseStarSprite) {
+        const size = o._starSprite.width;
+        if (o.specks && o.specks.length) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'screen';
+          ctx.drawImage(o._starSprite, o.x - size * 0.5, o.y - size * 0.5);
+          ctx.restore();
+        } else {
+          ctx.drawImage(o._starSprite, o.x - size * 0.5, o.y - size * 0.5);
+        }
       } else {
-        ctx.drawImage(o._starSprite, o.x - size * 0.5, o.y - size * 0.5);
+        drawStar(ctx, o.x, o.y, Math.max(0, o.r), null, 0);
       }
     }
     if (fadeEntitiesAlpha < 1) ctx.restore();
