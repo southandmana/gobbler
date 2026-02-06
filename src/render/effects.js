@@ -136,6 +136,7 @@ export const drawBurst = (ctx, burst, lerp) => {
   const y = burst.y;
 
   const ringR = lerp(0, 90, t);
+  ctx.save();
   ctx.lineWidth = 3;
   ctx.strokeStyle = '#f2f4f7';
   ctx.globalAlpha = 1 - t;
@@ -153,7 +154,7 @@ export const drawBurst = (ctx, burst, lerp) => {
     ctx.fillStyle = '#f2f4f7';
     ctx.fill();
   }
-  ctx.globalAlpha = 1;
+  ctx.restore();
 };
 
 export const drawShatter = (ctx, shatter) => {
@@ -380,5 +381,4 @@ export const drawFloaters = (ctx, floaters, clamp) => {
     ctx.fillText(f.txt, f.x, f.y);
   }
   ctx.restore();
-  ctx.globalAlpha = 1;
 };
