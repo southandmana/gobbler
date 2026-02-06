@@ -38,6 +38,8 @@ const clampPlayerToBounds = (player, clamp, groundY) => {
 };
 
 export const driftBlues = (blues, move) => {
+  if (!Array.isArray(blues) || blues.length === 0) return;
+  // Reverse iteration (i--) prevents index skipping when splicing elements
   for (let i = blues.length - 1; i >= 0; i--) {
     blues[i].x -= move;
     if (blues[i].x < -140) {
@@ -49,9 +51,13 @@ export const driftBlues = (blues, move) => {
 };
 
 export const updateBlues = (blues, player, dt, move, deps) => {
+  if (!Array.isArray(blues) || blues.length === 0) return;
   const { EAT, clamp, easeInOut, lerp, triggerChomp, popText, playEatStarSfx, groundY } = deps;
+  // Reverse iteration (i--) prevents index skipping when splicing elements
+  // Reverse iteration allows safe splice when stars are collected or leave screen
   for (let i = blues.length - 1; i >= 0; i--) {
     const o = blues[i];
+    if (!o) continue;
 
     if (o.specks) {
       for (const s of o.specks) {

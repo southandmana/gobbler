@@ -58,6 +58,8 @@ export const makeNPC = (x, y, r, pts, worth, MOUTH) => ({
 });
 
 export const driftNPCs = (npcs, move) => {
+  if (!Array.isArray(npcs) || npcs.length === 0) return;
+  // Reverse iteration (i--) prevents index skipping when splicing elements
   for (let i = npcs.length - 1; i >= 0; i--) {
     npcs[i].x -= move;
     if (npcs[i].x < -220) npcs.splice(i, 1);
@@ -65,6 +67,7 @@ export const driftNPCs = (npcs, move) => {
 };
 
 export const updateNPCs = (npcs, player, dt, move, deps) => {
+  if (!Array.isArray(npcs) || npcs.length === 0) return;
   const {
     groundY,
     EAT,
@@ -86,8 +89,11 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
 
   let nearestDangerDist = Infinity;
 
+  // Reverse iteration (i--) prevents index skipping when splicing elements
+  // Reverse iteration allows safe splice when NPCs are eaten or leave screen
   for (let i = npcs.length - 1; i >= 0; i--) {
     const n = npcs[i];
+    if (!n) continue;
 
     const angToPlayer = Math.atan2(player.y - n.y, player.x - n.x);
     n.mouth.dir = lerpAngle(n.mouth.dir, angToPlayer, 1 - Math.pow(0.001, dt));

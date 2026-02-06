@@ -17,6 +17,8 @@ const resolveAttackActive = (attackActive) => {
 };
 
 export const driftReds = (reds, move) => {
+  if (!Array.isArray(reds) || reds.length === 0) return;
+  // Reverse iteration (i--) prevents index skipping when splicing elements
   for (let i = reds.length - 1; i >= 0; i--) {
     reds[i].x -= move;
     if (reds[i].x < -140) {
@@ -28,6 +30,7 @@ export const driftReds = (reds, move) => {
 };
 
 export const updateReds = (reds, player, dt, move, deps) => {
+  if (!Array.isArray(reds) || reds.length === 0) return;
   const {
     EAT,
     HAZARD,
@@ -55,6 +58,8 @@ export const updateReds = (reds, player, dt, move, deps) => {
   const isPlayerInvulnerable = !!playerInvulnerable;
   const deflectSpeed = HAZARD.deflectSpeed;
   const deflectMinVxRatio = HAZARD.deflectMinVxRatio;
+  // Reverse iteration (i--) prevents index skipping when splicing elements
+  // Reverse iteration allows safe splice during loop
   for (let i = reds.length - 1; i >= 0; i--) {
     const o = reds[i];
 
@@ -107,9 +112,12 @@ export const updateReds = (reds, player, dt, move, deps) => {
 
       if (Array.isArray(npcs) && npcs.length > 0) {
         let exploded = false;
+        // Nested loop: both arrays use reverse iteration with separate indices (i for reds, j for npcs)
+        // Reverse iteration (i--) prevents index skipping when splicing elements
         for (let j = npcs.length - 1; j >= 0; j--) {
           const n = npcs[j];
           if (!n) continue;
+          // Safe to splice both arrays: j index for npcs, i index for reds, both reverse iterating
           const d = deps.dist(o.x, o.y, n.x, n.y);
           if (d <= (o.r + n.r)) {
             npcs.splice(j, 1);

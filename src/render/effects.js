@@ -96,15 +96,20 @@ export const updateBurst = (burst, dt, clamp) => {
 };
 
 export const updateShatter = (shatter, dt) => {
-  if (!shatter.active) return;
+  if (!shatter || !shatter.active || !Array.isArray(shatter.pieces) || shatter.pieces.length === 0) return;
   const gravity = 900;
+  // Reverse iteration (i--) prevents index skipping when splicing elements
+  // Reverse iteration allows safe removal of faded pieces
   for (let i = shatter.pieces.length - 1; i >= 0; i--) {
     const p = shatter.pieces[i];
     p.vy += gravity * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
 
-    const floor = p.groundY - p.r;
+    if (!p.groundY) continue;
+    const gy = typeof p.groundY === 'function' ? p.groundY() : p.groundY;
+    if (gy == null) continue;
+    const floor = gy - p.r;
     if (p.y > floor) {
       p.y = floor;
       if (!p.hit) p.hit = true;
@@ -242,6 +247,9 @@ export const startSparkles = (sparkles, x, y, r, rand, count = 10) => {
 };
 
 export const updateSparkles = (sparkles, dt) => {
+  if (!sparkles || !Array.isArray(sparkles.particles) || sparkles.particles.length === 0) return;
+  // Reverse iteration (i--) prevents index skipping when splicing elements
+  // Reverse iteration for safe splice during lifetime expiration
   for (let i = sparkles.particles.length - 1; i >= 0; i--) {
     const p = sparkles.particles[i];
     p.t += dt;
@@ -296,6 +304,8 @@ export const startDustPuff = (dust, x, y, r, rand) => {
 };
 
 export const updateDustPuffs = (dust, dt) => {
+  if (!dust || !Array.isArray(dust.puffs) || dust.puffs.length === 0) return;
+  // Reverse iteration (i--) prevents index skipping when splicing elements
   for (let i = dust.puffs.length - 1; i >= 0; i--) {
     const p = dust.puffs[i];
     p.t += dt;
@@ -351,6 +361,8 @@ export const popText = (floaters, txt, x, y, color = null) => {
 };
 
 export const updateFloaters = (floaters, dt) => {
+  if (!Array.isArray(floaters) || floaters.length === 0) return;
+  // Reverse iteration (i--) prevents index skipping when splicing elements
   for (let i = floaters.length - 1; i >= 0; i--) {
     const f = floaters[i];
     f.t += dt;

@@ -1735,6 +1735,9 @@ const updateBossOutro = (dt) => {
     }
   }
 
+  if (!Array.isArray(bossExplosions) || bossExplosions.length === 0) return;
+  // Reverse iteration (i--) prevents index skipping when splicing elements
+  // Reverse iteration for safe removal of completed explosions
   for (let i = bossExplosions.length - 1; i >= 0; i--) {
     const b = bossExplosions[i];
     updateLineBurst(b, dt, clamp);
