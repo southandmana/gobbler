@@ -232,7 +232,7 @@ const playBossPopSfx = createSfxPool('assets/sfx/eat_bomb.wav', 4, 0.7);
 const playBossBonusSfx = createSfxPool('assets/sfx/boss_bonus.wav', 2, 0.8);
 const playStageClearedSfx = createSfxPool('assets/sfx/stage_cleared.mp3', 1, 0.8);
 
-const playDied100Sequence = (() => {
+const { play: playDied100Sequence, stop: stopDied100Sequence } = (() => {
   const first = new Audio('assets/sfx/died_100_times_1.wav');
   const second = new Audio('assets/sfx/died_100_times_2.mp3');
   first.preload = 'auto';
@@ -241,7 +241,24 @@ const playDied100Sequence = (() => {
   first.volume = 0.8;
   second.volume = 0.8;
   let playing = false;
-  return () => {
+  const stop = () => {
+    playing = false;
+    death100ToastActive = false;
+    try {
+      first.onended = null;
+      first.pause();
+      first.currentTime = 0;
+    } catch {
+      // ignore autoplay restrictions
+    }
+    try {
+      second.pause();
+      second.currentTime = 0;
+    } catch {
+      // ignore autoplay restrictions
+    }
+  };
+  const play = () => {
     try {
       first.onended = null;
       if (playing) {
@@ -273,6 +290,7 @@ const playDied100Sequence = (() => {
       // ignore autoplay restrictions
     }
   };
+  return { play, stop };
 })();
 
 const titleImage = new Image();
@@ -662,7 +680,7 @@ const spawnBossExplosion = (scale = 1) => {
 
 const resetGameVars = () => {
   const keepDeathCount = isArcade() ? deathCount : 0;
-  const keepDeathToast = isArcade() ? death100ToastActive : false;
+  stopDied100Sequence();
   npcs.length = 0;
   reds.length = 0;
   blues.length = 0;
@@ -747,7 +765,7 @@ const resetGameVars = () => {
   bossDifficulty = 0;
   bossDifficultyActive = false;
   deathCount = keepDeathCount;
-  death100ToastActive = keepDeathToast;
+  death100ToastActive = false;
   enemiesKilled = 0;
   livesHalf = MAX_LIVES_HALF;
   finishExit = false;
@@ -781,6 +799,7 @@ const resetGameVars = () => {
 
 const beginStartScreen = () => {
   gameState.value = 'start';
+  stopDied100Sequence();
   applyHudMode();
   menuScrollX = scrollX;
   showScore(false);
@@ -942,6 +961,7 @@ const beginGame = () => {
 
 const beginGameOver = () => {
   gameState.value = 'gameover';
+  stopDied100Sequence();
   showScore(false);
   screenAnim.active = true;
   screenAnim.t = 0;
