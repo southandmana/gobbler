@@ -1,5 +1,21 @@
 export const makeRed = (x, y, r) => ({ x, y, r, state: 'fly', t: 0, x0: 0, y0: 0, r0: 0, vx: 0, vy: 0, bounces: 0 });
 
+const clampEntityToBounds = (entity, clamp, groundY) => {
+  if (!entity) return;
+  const r = Math.max(0, entity.r || 0);
+  const minX = r;
+  const maxX = Math.max(minX, innerWidth - r);
+  const minY = r;
+  const maxY = Math.max(minY, groundY() - r);
+  entity.x = clamp(entity.x, minX, maxX);
+  entity.y = clamp(entity.y, minY, maxY);
+};
+
+const resolveAttackActive = (attackActive) => {
+  if (typeof attackActive === 'function') return !!attackActive();
+  return !!attackActive;
+};
+
 export const driftReds = (reds, move) => {
   for (let i = reds.length - 1; i >= 0; i--) {
     reds[i].x -= move;
@@ -49,7 +65,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
       if (d <= capture && o.x >= player.x - 10) {
         const fromBelow = (player.y - o.y) > (o.r * 0.25);
         const upward = player.vy < -120;
-        const attackActive = (deps.attackActive && deps.attackActive());
+        const attackActive = resolveAttackActive(deps.attackActive);
         if (attackActive || (fromBelow && upward)) {
           o.state = 'deflect';
           o.t = 0;
@@ -63,6 +79,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
           const vxSign = Math.sign(vxRaw) || (dx >= 0 ? 1 : -1);
           o.vx = vxSign * Math.max(Math.abs(vxRaw), speed * deflectMinVxRatio);
           o.vy = Math.sin(ang) * speed;
+          clampEntityToBounds(o, clamp, groundY);
           continue;
         }
         o.state = 'eaten';
@@ -70,6 +87,8 @@ export const updateReds = (reds, player, dt, move, deps) => {
         o.x0 = o.x; o.y0 = o.y; o.r0 = o.r;
         if (deps.onBite) deps.onBite(o.x, o.y);
         triggerChomp(player.mouth, deps.MOUTH);
+        clampEntityToBounds(o, clamp, groundY);
+        o.x0 = o.x; o.y0 = o.y;
       }
     } else if (o.state === 'deflect') {
       o.x -= move;
@@ -150,7 +169,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
         }
       }
     } else {
-      const attackActive = (deps.attackActive && deps.attackActive());
+      const attackActive = resolveAttackActive(deps.attackActive);
       if (attackActive) {
         const prC = player.r * (0.5 * (1 + player.squashY));
         const capture = prC + o.r + EAT.capturePad;
@@ -169,6 +188,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
           const vxSign = Math.sign(vxRaw) || (dx >= 0 ? 1 : -1);
           o.vx = vxSign * Math.max(Math.abs(vxRaw), speed * deflectMinVxRatio);
           o.vy = Math.sin(ang) * speed;
+          clampEntityToBounds(o, clamp, groundY);
           continue;
         }
       }

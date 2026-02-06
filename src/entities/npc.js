@@ -13,6 +13,34 @@ const resolveFacing = (dirRad) => {
   return { angle: Math.PI - dirRad, flipX: true };
 };
 
+const clampEntityToBounds = (entity, clamp, groundY) => {
+  if (!entity) return;
+  const r = Math.max(0, entity.r || 0);
+  const minX = r;
+  const maxX = Math.max(minX, innerWidth - r);
+  const minY = r;
+  const maxY = Math.max(minY, groundY() - r);
+  entity.x = clamp(entity.x, minX, maxX);
+  entity.y = clamp(entity.y, minY, maxY);
+};
+
+const clampPlayerToBounds = (player, clamp, groundY) => {
+  if (!player) return;
+  const r = Math.max(0, player.r || 0);
+  const squashY = player.squashY ?? 1;
+  const ry = Math.max(0, r * squashY);
+  const minX = r;
+  const maxX = Math.max(minX, innerWidth - r);
+  const minY = ry;
+  const maxY = Math.max(minY, groundY() - ry);
+  player.x = clamp(player.x, minX, maxX);
+  const clampedY = clamp(player.y, minY, maxY);
+  if (clampedY !== player.y && clampedY === minY) {
+    player.vy = Math.max(0, player.vy || 0);
+  }
+  player.y = clampedY;
+};
+
 export const makeNPC = (x, y, r, pts, worth, MOUTH) => ({
   x,
   y,
@@ -94,7 +122,8 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
         if (npcCanEat) nearestDangerDist = Math.min(nearestDangerDist, d);
       }
 
-        if (d <= capture && n.x >= player.x - 10) {
+      if (d <= capture) {
+        if (n.x >= player.x - 10) {
           if (playerCanEat) {
             n.state = 'beingEaten';
             n.t = 0;
@@ -102,24 +131,33 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
             n.emotion = 'fear';
             triggerChomp(player.mouth, deps.MOUTH);
             if (deps.onBite) deps.onBite(n.x, n.y);
-        } else if (npcCanEat) {
-          n.state = 'eatingPlayer';
-          n.t = 0;
-          n.emotion = 'hungry';
-          triggerChomp(n.mouth, deps.MOUTH);
-          const { angle, flipX } = resolveFacing(n.mouth.dir);
-          const mouthX = (flipX ? -1 : 1) * n.r * 0.40;
-          const mouthY = n.r * 0.10;
-          player._beingEaten = {
-            t: 0,
-            x0: player.x,
-            y0: player.y,
-            r0: player.r,
-            eater: n,
-            offX: mouthX,
-            offY: mouthY,
-            inset: Math.min(player.r * 0.35, n.r * 0.45),
-          };
+            clampEntityToBounds(n, clamp, groundY);
+            n.x0 = n.x; n.y0 = n.y;
+          } else if (npcCanEat) {
+            n.state = 'eatingPlayer';
+            n.t = 0;
+            n.emotion = 'hungry';
+            triggerChomp(n.mouth, deps.MOUTH);
+            const { angle, flipX } = resolveFacing(n.mouth.dir);
+            const mouthX = (flipX ? -1 : 1) * n.r * 0.40;
+            const mouthY = n.r * 0.10;
+            player._beingEaten = {
+              t: 0,
+              x0: player.x,
+              y0: player.y,
+              r0: player.r,
+              eater: n,
+              offX: mouthX,
+              offY: mouthY,
+              inset: Math.min(player.r * 0.35, n.r * 0.45),
+            };
+            clampEntityToBounds(n, clamp, groundY);
+            clampPlayerToBounds(player, clamp, groundY);
+            if (player._beingEaten) {
+              player._beingEaten.x0 = player.x;
+              player._beingEaten.y0 = player.y;
+            }
+          }
         }
       }
     } else if (n.state === 'beingEaten') {
@@ -136,7 +174,7 @@ export const updateNPCs = (npcs, player, dt, move, deps) => {
         addScore(n.pts, player.x, player.y - player.r - 10);
         const grow = GROW.baseStep + GROW.fromRadius(n.r0);
         player.r = clamp(player.r + grow, player.baseR, player.maxR);
-        if (player.y > groundY() - (player.r * player.squashY)) player.y = groundY() - (player.r * player.squashY);
+        clampPlayerToBounds(player, clamp, groundY);
       }
     } else if (n.state === 'eatingPlayer') {
       n.x -= move;

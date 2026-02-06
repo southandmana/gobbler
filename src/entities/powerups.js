@@ -9,6 +9,34 @@ export const makeBlue = (x, y, r) => {
   return { x, y, r, state: 'fly', t: 0, x0: 0, y0: 0, r0: 0, specks };
 };
 
+const clampEntityToBounds = (entity, clamp, groundY) => {
+  if (!entity) return;
+  const r = Math.max(0, entity.r || 0);
+  const minX = r;
+  const maxX = Math.max(minX, innerWidth - r);
+  const minY = r;
+  const maxY = Math.max(minY, groundY() - r);
+  entity.x = clamp(entity.x, minX, maxX);
+  entity.y = clamp(entity.y, minY, maxY);
+};
+
+const clampPlayerToBounds = (player, clamp, groundY) => {
+  if (!player) return;
+  const r = Math.max(0, player.r || 0);
+  const squashY = player.squashY ?? 1;
+  const ry = Math.max(0, r * squashY);
+  const minX = r;
+  const maxX = Math.max(minX, innerWidth - r);
+  const minY = ry;
+  const maxY = Math.max(minY, groundY() - ry);
+  player.x = clamp(player.x, minX, maxX);
+  const clampedY = clamp(player.y, minY, maxY);
+  if (clampedY !== player.y && clampedY === minY) {
+    player.vy = Math.max(0, player.vy || 0);
+  }
+  player.y = clampedY;
+};
+
 export const driftBlues = (blues, move) => {
   for (let i = blues.length - 1; i >= 0; i--) {
     blues[i].x -= move;
@@ -17,7 +45,7 @@ export const driftBlues = (blues, move) => {
 };
 
 export const updateBlues = (blues, player, dt, move, deps) => {
-  const { EAT, clamp, easeInOut, lerp, triggerChomp, popText, playEatStarSfx } = deps;
+  const { EAT, clamp, easeInOut, lerp, triggerChomp, popText, playEatStarSfx, groundY } = deps;
   for (let i = blues.length - 1; i >= 0; i--) {
     const o = blues[i];
 
@@ -41,6 +69,8 @@ export const updateBlues = (blues, player, dt, move, deps) => {
         o.x0 = o.x; o.y0 = o.y; o.r0 = o.r;
         if (deps.onBite) deps.onBite(o.x, o.y);
         triggerChomp(player.mouth, deps.MOUTH);
+        clampEntityToBounds(o, clamp, groundY);
+        o.x0 = o.x; o.y0 = o.y;
       }
     } else {
       o.t = clamp(o.t + dt / EAT.swallowDur, 0, 1);
@@ -55,11 +85,7 @@ export const updateBlues = (blues, player, dt, move, deps) => {
         if (playEatStarSfx) playEatStarSfx();
         const before = player.r;
         player.r = player.baseR;
-        if (player.y > deps.groundY() - (player.r * player.squashY)) player.y = deps.groundY() - (player.r * player.squashY);
-        if (player.y + (player.r * player.squashY) < 0) {
-          player.y = player.r * player.squashY;
-          player.vy = Math.max(0, player.vy);
-        }
+        clampPlayerToBounds(player, clamp, groundY);
         if (before !== player.r) {
           if (deps.onShrink) deps.onShrink(player.x, player.y, player.r);
           popText('SMALL!', player.x, player.y - player.r - 12);
