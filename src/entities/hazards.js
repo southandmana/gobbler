@@ -77,10 +77,11 @@ export const updateReds = (reds, player, dt, move, deps) => {
       o.y += o.vy * dt;
       o.vy += 900 * dt;
 
-      if (npcs && npcs.length) {
+      if (Array.isArray(npcs) && npcs.length > 0) {
         let exploded = false;
         for (let j = npcs.length - 1; j >= 0; j--) {
           const n = npcs[j];
+          if (!n) continue;
           const d = deps.dist(o.x, o.y, n.x, n.y);
           if (d <= (o.r + n.r)) {
             npcs.splice(j, 1);
@@ -88,7 +89,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
             if (playEatBombSfx) playEatBombSfx();
             if (startLineBurst) startLineBurst(n.x, n.y, Math.max(0.7, o.r / 18));
             if (startNpcShatter) startNpcShatter(n.x, n.y, n.r);
-            if (!startLineBurst && !startNpcShatter) startBurst(n.x, n.y, 0.55);
+            if (!startLineBurst && !startNpcShatter && startBurst) startBurst(n.x, n.y, 0.55);
             reds.splice(i, 1);
             exploded = true;
             break;
@@ -98,13 +99,18 @@ export const updateReds = (reds, player, dt, move, deps) => {
       }
 
       if (bossActive && boss) {
-        const squashY = (boss.squashY === undefined ? 1 : boss.squashY);
-        const br = boss.r * (0.5 * (1 + squashY));
-        const d = deps.dist(o.x, o.y, boss.x, boss.y);
-        if (d <= (o.r + br)) {
-          if (onBossHit) onBossHit(o.x, o.y, o.r);
-          reds.splice(i, 1);
-          continue;
+        const squashY = boss.squashY ?? 1;
+        const brBase = boss?.r;
+        const bx = boss?.x;
+        const by = boss?.y;
+        if (brBase != null && bx != null && by != null) {
+          const br = brBase * (0.5 * (1 + squashY));
+          const d = deps.dist(o.x, o.y, bx, by);
+          if (d <= (o.r + br)) {
+            if (onBossHit) onBossHit(o.x, o.y, o.r);
+            reds.splice(i, 1);
+            continue;
+          }
         }
       }
 
@@ -138,7 +144,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
           if (hitGround && playBombHitsGroundSfx) playBombHitsGroundSfx();
           else if (!hitGround && playBombLeavesSfx) playBombLeavesSfx();
           if (hitGround && startLineBurst) startLineBurst(o.x, o.y, Math.max(0.6, o.r / 18));
-          else startBurst(o.x, o.y, 0.45);
+          else if (startBurst) startBurst(o.x, o.y, 0.45);
           reds.splice(i, 1);
           continue;
         }
@@ -181,7 +187,7 @@ export const updateReds = (reds, player, dt, move, deps) => {
         if (onPlayerDeath) onPlayerDeath();
         if (startLineBurst) startLineBurst(player.x, player.y, Math.max(0.7, (o.r0 || o.r) / 18));
         if (startHeadShatter) startHeadShatter(player.x, player.y, player.r);
-        if (!startLineBurst && !startHeadShatter) startBurst(player.x, player.y, 0.55);
+        if (!startLineBurst && !startHeadShatter && startBurst) startBurst(player.x, player.y, 0.55);
         deps.state.value = 'dying';
       }
     }
